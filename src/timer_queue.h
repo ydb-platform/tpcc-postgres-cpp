@@ -97,7 +97,7 @@ public:
     }
 
     template <typename U>
-    void Add(std::chrono::milliseconds delay, U&& value, TTimePoint now = std::chrono::steady_clock::now()) {
+    void Add(std::chrono::microseconds delay, U&& value, TTimePoint now = std::chrono::steady_clock::now()) {
         auto deadline = now + delay;
         size_t bucket = ComputeBucket(deadline);
         TItem item{deadline, std::forward<U>(value)};

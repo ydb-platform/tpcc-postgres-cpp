@@ -144,6 +144,39 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(tpcc PRIVATE -fcoroutines)
 endif()
 
+# --- coroutines_vs_threads benchmark ---
+add_executable(coroutines_vs_threads
+    src/coroutines_vs_threads/main.cpp
+    src/coroutines_vs_threads/workload.cpp
+    src/histogram.cpp
+    src/task_queue.cpp
+    src/log_backend.cpp
+    src/util.cpp
+)
+
+target_include_directories(coroutines_vs_threads PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/coroutines_vs_threads
+)
+
+target_compile_definitions(coroutines_vs_threads PRIVATE TPCC_NO_SPDLOG)
+
+target_link_libraries(coroutines_vs_threads PRIVATE
+    Folly::folly
+    gflags
+    fmt::fmt
+)
+
+target_compile_options(coroutines_vs_threads PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(coroutines_vs_threads PRIVATE -fcoroutines)
+endif()
+
 # --- Tests ---
 find_package(GTest QUIET)
 if(GTest_FOUND)

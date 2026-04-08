@@ -88,7 +88,11 @@ public:
     virtual void WakeupAndNeverSleep() = 0;
 
     virtual void TaskReady(std::coroutine_handle<> handle, size_t threadHint) = 0;
-    virtual void AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::milliseconds delay) = 0;
+    virtual void AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::microseconds delay) = 0;
+
+    void AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::milliseconds delay) {
+        AsyncSleep(handle, threadHint, std::chrono::microseconds(delay));
+    }
 
     virtual bool IncInflight(std::coroutine_handle<> handle, size_t threadHint) = 0;
     virtual void DecInflight() = 0;
@@ -111,7 +115,7 @@ std::unique_ptr<ITaskQueue> CreateTaskQueue(
 //-----------------------------------------------------------------------------
 
 struct TSuspend {
-    TSuspend(ITaskQueue& taskQueue, size_t threadHint, std::chrono::milliseconds delay)
+    TSuspend(ITaskQueue& taskQueue, size_t threadHint, std::chrono::microseconds delay)
         : TaskQueue(taskQueue)
         , ThreadHint(threadHint)
         , Delay(delay)
@@ -128,7 +132,7 @@ struct TSuspend {
 
     ITaskQueue& TaskQueue;
     size_t ThreadHint;
-    std::chrono::milliseconds Delay;
+    std::chrono::microseconds Delay;
 };
 
 //-----------------------------------------------------------------------------
@@ -213,6 +217,24 @@ struct TTaskReady {
         }
         TaskQueue.TaskReadyThreadSafe(h, ThreadHint);
         return true;
+    }
+
+    void await_resume() {}
+
+    ITaskQueue& TaskQueue;
+    size_t ThreadHint;
+};
+
+struct TYield {
+    TYield(ITaskQueue& taskQueue, size_t threadHint)
+        : TaskQueue(taskQueue)
+        , ThreadHint(threadHint)
+    {}
+
+    bool await_ready() { return false; }
+
+    void await_suspend(std::coroutine_handle<> h) {
+        TaskQueue.TaskReady(h, ThreadHint);
     }
 
     void await_resume() {}

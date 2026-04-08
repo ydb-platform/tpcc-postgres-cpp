@@ -65,7 +65,7 @@ public:
     void WakeupAndNeverSleep() override;
 
     void TaskReady(std::coroutine_handle<>, size_t threadHint) override;
-    void AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::milliseconds delay) override;
+    void AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::microseconds delay) override;
     bool IncInflight(std::coroutine_handle<> handle, size_t threadHint) override;
     void DecInflight() override;
 
@@ -169,7 +169,7 @@ void TTaskQueue::TaskReady(std::coroutine_handle<> handle, size_t threadHint) {
     }
 }
 
-void TTaskQueue::AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::milliseconds delay) {
+void TTaskQueue::AsyncSleep(std::coroutine_handle<> handle, size_t threadHint, std::chrono::microseconds delay) {
     auto contextIndex = threadHint % PerThreadContext.size();
     auto& context = *PerThreadContext[contextIndex];
     context.SleepingTasks.Add(delay, std::move(handle));
