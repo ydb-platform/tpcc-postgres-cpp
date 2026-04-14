@@ -6,82 +6,19 @@ libpqxx for PostgreSQL access, and an optional ftxui-based terminal UI.
 
 ## Dependencies
 
-Requires Clang 16+ (tested with Clang 20) and a running PostgreSQL instance.
-
-### fmt
-
-Build [fmt](https://github.com/fmtlib/fmt) from source:
+Requires Clang 16+ (tested with Clang 20) and the PostgreSQL client library:
 ```
-cd ~/packages
-git clone --branch 11.1.4 --depth 1 https://github.com/fmtlib/fmt.git
-cd fmt
-cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
-    -DCMAKE_INSTALL_PREFIX=$HOME/packages/fmt/install \
-    -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)
-cmake --install build
+sudo apt install libpq-dev
 ```
 
-### spdlog
-
-Build [spdlog](https://github.com/gabime/spdlog) v1.15.3 from source (with external fmt):
-```
-cd ~/packages
-git clone --branch v1.15.3 --depth 1 https://github.com/gabime/spdlog.git
-cd spdlog
-cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
-    -DCMAKE_INSTALL_PREFIX=$HOME/packages/spdlog/install \
-    -DSPDLOG_FMT_EXTERNAL=ON \
-    -DCMAKE_PREFIX_PATH="$HOME/packages/fmt/install" \
-    -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)
-cmake --install build
-```
-
-### gflags
-
-Install via apt or build from source:
-```
-sudo apt install libgflags-dev
-```
-
-### libpqxx
-
-Build libpqxx 7.x from source (requires libpq-dev):
-```
-cd ~/packages
-git clone --branch 7.10.0 --depth 1 https://github.com/jtv/libpqxx.git
-cd libpqxx
-cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
-    -DCMAKE_INSTALL_PREFIX=$HOME/packages/libpqxx/install \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TEST=OFF -DBUILD_DOC=OFF
-cmake --build build -j$(nproc)
-cmake --install build
-```
-
-### ftxui (optional)
-
-Provides a live terminal UI during benchmark runs. Without it, stats are printed to the console.
-```
-cd ~/packages
-git clone --branch v6.1.9 --depth 1 https://github.com/ArthurSonzogni/FTXUI.git ftxui
-cd ftxui
-cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
-    -DCMAKE_INSTALL_PREFIX=$HOME/packages/ftxui/install \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DFTXUI_BUILD_EXAMPLES=OFF -DFTXUI_BUILD_DOCS=OFF -DFTXUI_BUILD_TESTS=OFF
-cmake --build build -j$(nproc)
-cmake --install build
-```
+All other dependencies (fmt, spdlog, gflags, libpqxx, ftxui, googletest) are bundled
+as git submodules and built automatically.
 
 ## Building
 
 ```
-cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
-    -DCMAKE_PREFIX_PATH="$HOME/packages/fmt/install;$HOME/packages/spdlog/install;$HOME/packages/libpqxx/install;$HOME/packages/ftxui/install" \
-    -DCMAKE_BUILD_TYPE=Release
-
+git submodule update --init
+cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
 ```
 

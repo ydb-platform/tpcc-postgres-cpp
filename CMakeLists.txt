@@ -11,22 +11,35 @@ if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     message(WARNING "This project is designed for Clang 16+. Current compiler: ${CMAKE_CXX_COMPILER_ID}")
 endif()
 
-# Dependencies
-
-# libpqxx (7.x+, built from source via CMake)
-find_package(libpqxx REQUIRED)
-
-find_package(gflags REQUIRED)
-
-# spdlog
-find_package(spdlog REQUIRED)
+# Dependencies (bundled via third_party/ submodules)
 
 # fmt
-find_package(fmt REQUIRED)
+set(FMT_INSTALL OFF CACHE BOOL "" FORCE)
+set(FMT_TEST OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/fmt)
+
+# spdlog (must come after fmt)
+set(SPDLOG_FMT_EXTERNAL ON CACHE BOOL "" FORCE)
+set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
+set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/spdlog)
+
+# gflags
+set(GFLAGS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/gflags)
+
+# libpqxx (requires system libpq-dev)
+set(SKIP_BUILD_TEST ON CACHE BOOL "" FORCE)
+set(BUILD_DOC OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/libpqxx)
 
 # ftxui (optional TUI)
-find_package(ftxui QUIET)
-if(ftxui_FOUND)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ftxui/CMakeLists.txt")
+    set(FTXUI_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    set(FTXUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(FTXUI_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(FTXUI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(third_party/ftxui)
     set(TPCC_HAS_TUI ON)
     message(STATUS "ftxui found: TUI support enabled")
 else()
@@ -164,8 +177,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # --- Tests ---
-find_package(GTest QUIET)
-if(GTest_FOUND)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/googletest/CMakeLists.txt")
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    add_subdirectory(third_party/googletest)
     enable_testing()
 
     set(TPCC_TEST_LIB_SOURCES
@@ -204,7 +218,7 @@ if(GTest_FOUND)
     endif()
 
     add_test(NAME tpcc_tests COMMAND tpcc_tests)
-    message(STATUS "GTest found: test target 'tpcc_tests' enabled")
+    message(STATUS "Test target 'tpcc_tests' enabled")
 
     # --- Per-transaction integration tests (require PostgreSQL) ---
     set(TPCC_PG_TEST_SOURCES
@@ -255,9 +269,9 @@ if(GTest_FOUND)
         LABELS "pg"
         TIMEOUT 120
     )
-    message(STATUS "GTest found: test target 'tpcc_pg_tests' enabled")
+    message(STATUS "Test target 'tpcc_pg_tests' enabled")
 else()
-    message(STATUS "GTest not found: tests disabled")
+    message(STATUS "third_party/googletest not found: tests disabled")
 endif()
 
 # --- Smoke test (requires running PostgreSQL) ---
