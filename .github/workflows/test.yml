@@ -1,0 +1,195 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-20 libgflags-dev libgtest-dev
+
+      - name: Build fmt
+        run: |
+          git clone --branch 11.1.4 --depth 1 https://github.com/fmtlib/fmt.git /tmp/fmt
+          cmake -B /tmp/fmt/build -S /tmp/fmt \
+            -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/deps/fmt \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/fmt/build -j$(nproc)
+          cmake --install /tmp/fmt/build
+
+      - name: Build and run unit tests
+        run: |
+          cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target tpcc_tests -j$(nproc)
+          ./build/tpcc_tests
+
+  smoke-test:
+    name: Smoke Test (PostgreSQL)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: tpcc_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-20 libgflags-dev libpq-dev postgresql-client
+
+      - name: Build fmt
+        run: |
+          git clone --branch 11.1.4 --depth 1 https://github.com/fmtlib/fmt.git /tmp/fmt
+          cmake -B /tmp/fmt/build -S /tmp/fmt \
+            -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/deps/fmt \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/fmt/build -j$(nproc)
+          cmake --install /tmp/fmt/build
+
+      - name: Build spdlog
+        run: |
+          git clone --branch v1.15.3 --depth 1 https://github.com/gabime/spdlog.git /tmp/spdlog
+          cmake -B /tmp/spdlog/build -S /tmp/spdlog \
+            -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/deps/spdlog \
+            -DSPDLOG_FMT_EXTERNAL=ON \
+            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/spdlog/build -j$(nproc)
+          cmake --install /tmp/spdlog/build
+
+      - name: Build libpqxx
+        run: |
+          git clone --branch 7.10.0 --depth 1 https://github.com/jtv/libpqxx.git /tmp/libpqxx
+          cmake -B /tmp/libpqxx/build -S /tmp/libpqxx \
+            -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/deps/libpqxx \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TEST=OFF -DBUILD_DOC=OFF
+          cmake --build /tmp/libpqxx/build -j$(nproc)
+          cmake --install /tmp/libpqxx/build
+
+      - name: Build tpcc
+        run: |
+          cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt;/tmp/deps/spdlog;/tmp/deps/libpqxx" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j$(nproc)
+
+      - name: Run smoke test
+        run: |
+          TPCC_BIN=./build/tpcc tests/smoke_test.sh
+
+  sanitizer-smoke:
+    name: Smoke Test (${{ matrix.sanitizer }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sanitizer: asan
+            cmake_flags: "-DCMAKE_CXX_FLAGS=-fsanitize=address -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address"
+            env_vars: "ASAN_OPTIONS=detect_leaks=1:halt_on_error=1"
+          - sanitizer: tsan
+            cmake_flags: "-DCMAKE_CXX_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread"
+            env_vars: "TSAN_OPTIONS=halt_on_error=1"
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: tpcc_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-20 libgflags-dev libpq-dev postgresql-client
+
+      - name: Build fmt
+        run: |
+          git clone --branch 11.1.4 --depth 1 https://github.com/fmtlib/fmt.git /tmp/fmt
+          cmake -B /tmp/fmt/build -S /tmp/fmt \
+            -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/deps/fmt \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/fmt/build -j$(nproc)
+          cmake --install /tmp/fmt/build
+
+      - name: Build spdlog
+        run: |
+          git clone --branch v1.15.3 --depth 1 https://github.com/gabime/spdlog.git /tmp/spdlog
+          cmake -B /tmp/spdlog/build -S /tmp/spdlog \
+            -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/deps/spdlog \
+            -DSPDLOG_FMT_EXTERNAL=ON \
+            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/spdlog/build -j$(nproc)
+          cmake --install /tmp/spdlog/build
+
+      - name: Build libpqxx
+        run: |
+          git clone --branch 7.10.0 --depth 1 https://github.com/jtv/libpqxx.git /tmp/libpqxx
+          cmake -B /tmp/libpqxx/build -S /tmp/libpqxx \
+            -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/deps/libpqxx \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TEST=OFF -DBUILD_DOC=OFF
+          cmake --build /tmp/libpqxx/build -j$(nproc)
+          cmake --install /tmp/libpqxx/build
+
+      - name: Build tpcc (${{ matrix.sanitizer }})
+        run: |
+          cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
+            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt;/tmp/deps/spdlog;/tmp/deps/libpqxx" \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            ${{ matrix.cmake_flags }}
+          cmake --build build -j$(nproc)
+
+      - name: Run smoke test (${{ matrix.sanitizer }})
+        run: |
+          export ${{ matrix.env_vars }}
+          TPCC_BIN=./build/tpcc tests/smoke_test.sh

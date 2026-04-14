@@ -45,7 +45,8 @@ PgSession PgConnectionPool::AcquireSession() {
 
     auto conn = std::move(connections_.front());
     connections_.pop();
-    return PgSession(std::move(conn), executor_.get());
+    checkedOut_.push_back(conn.get());
+    return PgSession(std::move(conn), executor_.get(), sessionShutdownFlag_);
 }
 
 void PgConnectionPool::ReleaseSession(PgSession session) {
@@ -54,9 +55,22 @@ void PgConnectionPool::ReleaseSession(PgSession session) {
 
     {
         std::lock_guard lock(mutex_);
+        std::erase(checkedOut_, conn.get());
         connections_.push(std::move(conn));
     }
     cv_.notify_one();
+}
+
+void PgConnectionPool::CancelAll() {
+    sessionShutdownFlag_->store(true, std::memory_order_release);
+
+    std::lock_guard lock(mutex_);
+    for (auto* conn : checkedOut_) {
+        try {
+            conn->cancel_query();
+        } catch (...) {
+        }
+    }
 }
 
 PgConnectionPool::SessionGuard PgConnectionPool::AcquireGuard() {

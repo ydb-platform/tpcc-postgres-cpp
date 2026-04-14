@@ -56,6 +56,10 @@ public:
 
     SessionGuard AcquireGuard();
 
+    // Cancel all in-flight queries on checked-out connections.
+    // Call before Join/destruction to unblock threads waiting on locks.
+    void CancelAll();
+
     IExecutor* GetExecutor() { return executor_.get(); }
     size_t GetPoolSize() const { return poolSize_; }
 
@@ -67,6 +71,9 @@ private:
     std::mutex mutex_;
     std::condition_variable cv_;
     std::queue<std::unique_ptr<pqxx::connection>> connections_;
+    std::vector<pqxx::connection*> checkedOut_;
+    std::shared_ptr<std::atomic<bool>> sessionShutdownFlag_ =
+        std::make_shared<std::atomic<bool>>(false);
     bool shutdown_ = false;
 };
 

@@ -496,16 +496,22 @@ void CheckSync(const std::string& connectionString, int warehouseCount, bool aft
         }
     };
 
-    // Base checks
+    // Static tables: row counts never change during benchmark
     runCheck(TABLE_WAREHOUSE, [&](auto& t) { BaseCheckWarehouseTable(t, warehouseCount); });
     runCheck(TABLE_DISTRICT, [&](auto& t) { BaseCheckDistrictTable(t, warehouseCount); });
     runCheck(TABLE_CUSTOMER, [&](auto& t) { BaseCheckCustomerTable(t, warehouseCount); });
     runCheck(TABLE_ITEM, [&](auto& t) { BaseCheckItemTable(t); });
     runCheck(TABLE_STOCK, [&](auto& t) { BaseCheckStockTable(t, warehouseCount); });
-    runCheck(TABLE_OORDER, [&](auto& t) { BaseCheckOorderTable(t, warehouseCount); });
-    runCheck(TABLE_NEW_ORDER, [&](auto& t) { BaseCheckNewOrderTable(t, warehouseCount); });
-    runCheck(TABLE_ORDER_LINE, [&](auto& t) { BaseCheckOrderLineTable(t, warehouseCount); });
-    runCheck(TABLE_HISTORY, [&](auto& t) { BaseCheckHistoryTable(t, warehouseCount); });
+
+    // Dynamic tables: row counts change during benchmark (NewOrder adds orders/order_lines,
+    // Delivery removes new_orders, Payment adds history). Exact count checks are only
+    // valid right after import.
+    if (afterImport) {
+        runCheck(TABLE_OORDER, [&](auto& t) { BaseCheckOorderTable(t, warehouseCount); });
+        runCheck(TABLE_NEW_ORDER, [&](auto& t) { BaseCheckNewOrderTable(t, warehouseCount); });
+        runCheck(TABLE_ORDER_LINE, [&](auto& t) { BaseCheckOrderLineTable(t, warehouseCount); });
+        runCheck(TABLE_HISTORY, [&](auto& t) { BaseCheckHistoryTable(t, warehouseCount); });
+    }
 
     if (failedCount > 0) {
         std::cout << "Base checks failed, aborting consistency checks!" << std::endl;

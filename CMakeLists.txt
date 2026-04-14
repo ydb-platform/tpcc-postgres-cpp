@@ -205,6 +205,84 @@ if(GTest_FOUND)
 
     add_test(NAME tpcc_tests COMMAND tpcc_tests)
     message(STATUS "GTest found: test target 'tpcc_tests' enabled")
+
+    # --- Per-transaction integration tests (require PostgreSQL) ---
+    set(TPCC_PG_TEST_SOURCES
+        src/pg_session.cpp
+        src/pg_connection_pool.cpp
+        src/common_queries.cpp
+        src/transaction_neworder.cpp
+        src/transaction_delivery.cpp
+        src/transaction_payment.cpp
+        src/transaction_orderstatus.cpp
+        src/transaction_stocklevel.cpp
+        src/transaction_simulation.cpp
+        src/init.cpp
+        src/import.cpp
+        src/clean.cpp
+        src/check.cpp
+        src/path_checker.cpp
+    )
+
+    add_executable(tpcc_pg_tests
+        src/ut/pg_transaction_ut.cpp
+        ${TPCC_PG_TEST_SOURCES}
+        ${TPCC_TEST_LIB_SOURCES}
+    )
+
+    target_include_directories(tpcc_pg_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+    target_link_libraries(tpcc_pg_tests PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        libpqxx::pqxx
+        spdlog::spdlog
+        fmt::fmt
+    )
+
+    target_compile_options(tpcc_pg_tests PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+    )
+
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(tpcc_pg_tests PRIVATE -fcoroutines)
+    endif()
+
+    add_test(NAME tpcc_pg_tests COMMAND tpcc_pg_tests)
+    set_tests_properties(tpcc_pg_tests PROPERTIES
+        LABELS "pg"
+        TIMEOUT 120
+    )
+    message(STATUS "GTest found: test target 'tpcc_pg_tests' enabled")
 else()
     message(STATUS "GTest not found: tests disabled")
+endif()
+
+# --- Smoke test (requires running PostgreSQL) ---
+if(NOT TARGET tpcc)
+    message(STATUS "Smoke test skipped: tpcc target not available")
+else()
+    add_test(
+        NAME smoke_test
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/smoke_test.sh
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(smoke_test PROPERTIES
+        LABELS "pg"
+        TIMEOUT 300
+        ENVIRONMENT "TPCC_BIN=$<TARGET_FILE:tpcc>"
+    )
+
+    add_test(
+        NAME stress_test
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/stress_test.sh
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(stress_test PROPERTIES
+        LABELS "pg;stress"
+        TIMEOUT 600
+        ENVIRONMENT "TPCC_BIN=$<TARGET_FILE:tpcc>"
+    )
 endif()

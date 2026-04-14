@@ -146,6 +146,32 @@ cmake --build build --target tpcc_tests -j$(nproc)
 ./build/tpcc_tests
 ```
 
+### Integration tests against PostgreSQL
+
+A Docker Compose file is provided to spin up a PostgreSQL 18 instance:
+```
+docker compose up -d
+```
+
+Run the end-to-end smoke test (init, import, check, run, check, clean):
+```
+PGHOST=localhost PGUSER=postgres PGPASSWORD=postgres \
+    TPCC_BIN=./build/tpcc tests/smoke_test.sh
+```
+
+The smoke test defaults to 10 warehouses and 120 seconds with standard TPC-C
+keying/think time delays. Override via environment variables:
+```
+TPCC_WAREHOUSES=5 TPCC_DURATION=60 tests/smoke_test.sh
+```
+
+Per-transaction correctness tests (requires Google Test and a running PostgreSQL):
+```
+cmake --build build --target tpcc_pg_tests -j$(nproc)
+TPCC_TEST_CONNECTION="host=localhost dbname=tpcc_test user=postgres password=postgres" \
+    ./build/tpcc_pg_tests
+```
+
 ### Simulation mode
 
 Test the coroutine/IO infrastructure without a real database:

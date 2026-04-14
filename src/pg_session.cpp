@@ -3,15 +3,18 @@
 
 namespace NTPCC {
 
-PgSession::PgSession(std::unique_ptr<pqxx::connection> conn, IExecutor* executor)
+PgSession::PgSession(std::unique_ptr<pqxx::connection> conn, IExecutor* executor,
+                     std::shared_ptr<std::atomic<bool>> shutdownFlag)
     : conn_(std::move(conn))
     , executor_(executor)
+    , shutdownFlag_(std::move(shutdownFlag))
 {}
 
 PgSession::PgSession(PgSession&& other) noexcept
     : conn_(std::move(other.conn_))
     , txn_(std::move(other.txn_))
     , executor_(other.executor_)
+    , shutdownFlag_(std::move(other.shutdownFlag_))
 {
     other.executor_ = nullptr;
 }
@@ -21,9 +24,16 @@ PgSession& PgSession::operator=(PgSession&& other) noexcept {
         conn_ = std::move(other.conn_);
         txn_ = std::move(other.txn_);
         executor_ = other.executor_;
+        shutdownFlag_ = std::move(other.shutdownFlag_);
         other.executor_ = nullptr;
     }
     return *this;
+}
+
+void PgSession::CheckShutdown() const {
+    if (shutdownFlag_ && shutdownFlag_->load(std::memory_order_relaxed)) {
+        throw std::runtime_error("session shutdown");
+    }
 }
 
 PgSession::~PgSession() {
@@ -46,6 +56,7 @@ TFuture<QueryResult> PgSession::ExecuteQuery(
     executor_->Submit([this, sqlCopy = std::move(sqlCopy), params,
                        p = std::move(promise)]() mutable {
         try {
+            CheckShutdown();
             if (!txn_) {
                 txn_ = std::make_unique<SnapshotTxn>(*conn_);
             }
@@ -69,6 +80,7 @@ TFuture<uint64_t> PgSession::ExecuteModify(
     executor_->Submit([this, sqlCopy = std::move(sqlCopy), params,
                        p = std::move(promise)]() mutable {
         try {
+            CheckShutdown();
             if (!txn_) {
                 txn_ = std::make_unique<SnapshotTxn>(*conn_);
             }
@@ -88,6 +100,7 @@ TFuture<void> PgSession::Commit() {
 
     executor_->Submit([this, p = std::move(promise)]() mutable {
         try {
+            CheckShutdown();
             if (txn_) {
                 txn_->commit();
                 txn_.reset();

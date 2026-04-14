@@ -54,7 +54,7 @@ TFuture<QueryResult> GetCustomersByLastName(
     const std::string& lastName)
 {
     static constexpr std::string_view sql =
-        "SELECT c_first, c_middle, c_id, c_street_1, c_street_2, c_city, "
+        "SELECT c_first, c_middle, c_last, c_id, c_street_1, c_street_2, c_city, "
         "c_state, c_zip, c_phone, c_credit, c_credit_lim, c_discount, "
         "c_balance, c_ytd_payment, c_payment_cnt, c_since "
         "FROM customer "

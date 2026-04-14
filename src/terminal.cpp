@@ -159,18 +159,22 @@ TFuture<void> TTerminal::Run() {
             } catch (const TUserAbortedException&) {
                 Stats->IncUserAborted(static_cast<ETransactionType>(txIndex));
                 LOG_T("Terminal {} {} user aborted", Context.TerminalID, txName);
-            } catch (const pqxx::serialization_failure&) {
+            } catch (const pqxx::transaction_rollback&) {
                 if (attempt < MaxRetries) {
                     shouldRetry = true;
-                    LOG_D("Terminal {} {} serialization failure, retry {}/{}",
+                    LOG_D("Terminal {} {} transaction rollback, retry {}/{}",
                           Context.TerminalID, txName, attempt + 1, MaxRetries);
                 } else {
                     Stats->IncFailed(static_cast<ETransactionType>(txIndex));
-                    LOG_D("Terminal {} {} serialization failure, retries exhausted", Context.TerminalID, txName);
+                    LOG_D("Terminal {} {} transaction rollback, retries exhausted", Context.TerminalID, txName);
                 }
             } catch (const std::exception& ex) {
-                LOG_E("Terminal {} exception in {}: {}", Context.TerminalID, txName, ex.what());
-                fatal = true;
+                if (StopToken.stop_requested()) {
+                    LOG_D("Terminal {} {} interrupted during shutdown", Context.TerminalID, txName);
+                } else {
+                    LOG_E("Terminal {} exception in {}: {}", Context.TerminalID, txName, ex.what());
+                    fatal = true;
+                }
             }
 
             if (!shouldRetry) break;

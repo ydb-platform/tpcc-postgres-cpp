@@ -17,7 +17,8 @@ using SnapshotTxn = pqxx::transaction<pqxx::isolation_level::repeatable_read>;
 class PgSession {
 public:
     PgSession() = default;
-    PgSession(std::unique_ptr<pqxx::connection> conn, IExecutor* executor);
+    PgSession(std::unique_ptr<pqxx::connection> conn, IExecutor* executor,
+              std::shared_ptr<std::atomic<bool>> shutdownFlag = {});
 
     PgSession(PgSession&& other) noexcept;
     PgSession& operator=(PgSession&& other) noexcept;
@@ -53,10 +54,15 @@ public:
     // Returns the underlying connection back (for pool return)
     std::unique_ptr<pqxx::connection> ReleaseConnection();
 
+    void SetShutdownFlag(std::shared_ptr<std::atomic<bool>> flag) { shutdownFlag_ = std::move(flag); }
+
 private:
+    void CheckShutdown() const;
+
     std::unique_ptr<pqxx::connection> conn_;
     std::unique_ptr<SnapshotTxn> txn_;
     IExecutor* executor_ = nullptr;
+    std::shared_ptr<std::atomic<bool>> shutdownFlag_;
 };
 
 } // namespace NTPCC

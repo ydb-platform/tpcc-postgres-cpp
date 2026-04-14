@@ -140,11 +140,19 @@ void PrintConsoleStats(
         }
     }
 
-    LOG_I("{:.0f}s/{:.0f}s | tpmC:{:.0f} eff:{:.1f}% | OK:{} Fail:{} Inflight:{} |{}",
-          elapsed, elapsed + remaining, tpmc, efficiency,
-          totalOK, totalFailed,
-          TransactionsInflight.load(std::memory_order_relaxed),
-          latencies);
+    if (config.NoDelays) {
+        LOG_I("{:.0f}s/{:.0f}s | tpmC:{:.0f} | OK:{} Fail:{} Inflight:{} |{}",
+              elapsed, elapsed + remaining, tpmc,
+              totalOK, totalFailed,
+              TransactionsInflight.load(std::memory_order_relaxed),
+              latencies);
+    } else {
+        LOG_I("{:.0f}s/{:.0f}s | tpmC:{:.0f} eff:{:.1f}% | OK:{} Fail:{} Inflight:{} |{}",
+              elapsed, elapsed + remaining, tpmc, efficiency,
+              totalOK, totalFailed,
+              TransactionsInflight.load(std::memory_order_relaxed),
+              latencies);
+    }
 }
 
 void PrintFinalResults(
@@ -169,7 +177,9 @@ void PrintFinalResults(
 
     LOG_I("=== TPC-C Results ===");
     LOG_I("  New-Order Throughput: {:.2f} tpmC", tpmc);
-    LOG_I("  Efficiency: {:.1f}%", efficiency);
+    if (!config.NoDelays) {
+        LOG_I("  Efficiency: {:.1f}%", efficiency);
+    }
     LOG_I("  Total Failed: {}", totalFailed);
 
     for (size_t i = 0; i < TRANSACTION_TYPE_COUNT; ++i) {
@@ -225,8 +235,13 @@ void RunSync(const TRunConfig& config) {
 
     std::unique_ptr<PgConnectionPool> connectionPool;
     if (needsConnections) {
+        size_t ioThreads = std::max(config.IOThreads, poolSize);
+        if (ioThreads != config.IOThreads) {
+            LOG_I("Raising IO threads from {} to {} (must be >= connection pool size to avoid deadlocks)",
+                  config.IOThreads, ioThreads);
+        }
         connectionPool = std::make_unique<PgConnectionPool>(
-            config.ConnectionString, poolSize, config.IOThreads);
+            config.ConnectionString, poolSize, ioThreads);
     }
 
     auto taskQueue = CreateTaskQueue(threadCount, maxInflight, terminalCount, terminalCount);
@@ -344,6 +359,9 @@ void RunSync(const TRunConfig& config) {
 
     LOG_I("Stopping terminals...");
     GetGlobalInterruptSource().request_stop();
+    if (connectionPool) {
+        connectionPool->CancelAll();
+    }
     taskQueue->WakeupAndNeverSleep();
     taskQueue->Join();
 
