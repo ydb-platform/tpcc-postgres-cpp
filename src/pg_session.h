@@ -12,6 +12,8 @@
 
 namespace NTPCC {
 
+using SnapshotTxn = pqxx::transaction<pqxx::isolation_level::repeatable_read>;
+
 class PgSession {
 public:
     PgSession() = default;
@@ -53,7 +55,7 @@ public:
 
 private:
     std::unique_ptr<pqxx::connection> conn_;
-    std::unique_ptr<pqxx::work> txn_;
+    std::unique_ptr<SnapshotTxn> txn_;
     IExecutor* executor_ = nullptr;
 };
 

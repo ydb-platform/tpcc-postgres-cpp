@@ -46,12 +46,10 @@ protected:
 };
 
 static inline void SpinLockPause() {
-#if defined(__GNUC__)
-    #if defined(_i386_) || defined(_x86_64_)
-        _mm_pause();
-    #elif defined(_arm64_)
-        __asm __volatile("yield" ::: "memory");
-    #endif
+#if defined(__x86_64__) || defined(__i386__)
+    __builtin_ia32_pause();
+#elif defined(__aarch64__)
+    __asm__ __volatile__("yield" ::: "memory");
 #endif
 }
 

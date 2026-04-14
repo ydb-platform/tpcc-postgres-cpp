@@ -127,40 +127,53 @@ TFuture<void> TTerminal::Run() {
         std::chrono::microseconds latencyPure{0};
         bool fatal = false;
 
-        try {
-            std::optional<PgConnectionPool::SessionGuard> guard;
-            if (ConnectionPool) {
-                guard.emplace(ConnectionPool->AcquireGuard());
+        constexpr int MaxRetries = 3;
+        for (int attempt = 0; attempt <= MaxRetries; ++attempt) {
+            bool shouldRetry = false;
+            try {
+                std::optional<PgConnectionPool::SessionGuard> guard;
+                if (ConnectionPool) {
+                    guard.emplace(ConnectionPool->AcquireGuard());
+                }
+
+                PgSession dummySession;
+                PgSession& session = guard ? **guard : dummySession;
+
+                latencyPure = std::chrono::microseconds{0};
+                TFuture<bool> future = simulationMode
+                    ? GetSimulationTask(Context, latencyPure, session)
+                    : Transactions[txIndex].TaskFunc(Context, latencyPure, session);
+                auto result = co_await TSuspendWithFuture(std::move(future), Context.TaskQueue, Context.TerminalID);
+
+                auto endTime = std::chrono::steady_clock::now();
+                auto latencyFull = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+                auto latencyTransaction = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTimeTransaction);
+
+                if (result) {
+                    Stats->AddOK(static_cast<ETransactionType>(txIndex), latencyTransaction, latencyFull, latencyPure);
+                    LOG_T("Terminal {} {} succeeded", Context.TerminalID, txName);
+                } else {
+                    Stats->IncFailed(static_cast<ETransactionType>(txIndex));
+                    LOG_D("Terminal {} {} failed (retryable)", Context.TerminalID, txName);
+                }
+            } catch (const TUserAbortedException&) {
+                Stats->IncUserAborted(static_cast<ETransactionType>(txIndex));
+                LOG_T("Terminal {} {} user aborted", Context.TerminalID, txName);
+            } catch (const pqxx::serialization_failure&) {
+                if (attempt < MaxRetries) {
+                    shouldRetry = true;
+                    LOG_D("Terminal {} {} serialization failure, retry {}/{}",
+                          Context.TerminalID, txName, attempt + 1, MaxRetries);
+                } else {
+                    Stats->IncFailed(static_cast<ETransactionType>(txIndex));
+                    LOG_D("Terminal {} {} serialization failure, retries exhausted", Context.TerminalID, txName);
+                }
+            } catch (const std::exception& ex) {
+                LOG_E("Terminal {} exception in {}: {}", Context.TerminalID, txName, ex.what());
+                fatal = true;
             }
 
-            PgSession dummySession;
-            PgSession& session = guard ? **guard : dummySession;
-
-            TFuture<bool> future = simulationMode
-                ? GetSimulationTask(Context, latencyPure, session)
-                : Transactions[txIndex].TaskFunc(Context, latencyPure, session);
-            auto result = co_await TSuspendWithFuture(std::move(future), Context.TaskQueue, Context.TerminalID);
-
-            auto endTime = std::chrono::steady_clock::now();
-            auto latencyFull = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
-            auto latencyTransaction = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTimeTransaction);
-
-            if (result) {
-                Stats->AddOK(static_cast<ETransactionType>(txIndex), latencyTransaction, latencyFull, latencyPure);
-                LOG_T("Terminal {} {} succeeded", Context.TerminalID, txName);
-            } else {
-                Stats->IncFailed(static_cast<ETransactionType>(txIndex));
-                LOG_D("Terminal {} {} failed (retryable)", Context.TerminalID, txName);
-            }
-        } catch (const TUserAbortedException&) {
-            Stats->IncUserAborted(static_cast<ETransactionType>(txIndex));
-            LOG_T("Terminal {} {} user aborted", Context.TerminalID, txName);
-        } catch (const pqxx::serialization_failure&) {
-            Stats->IncFailed(static_cast<ETransactionType>(txIndex));
-            LOG_D("Terminal {} {} serialization failure", Context.TerminalID, txName);
-        } catch (const std::exception& ex) {
-            LOG_E("Terminal {} exception in {}: {}", Context.TerminalID, txName, ex.what());
-            fatal = true;
+            if (!shouldRetry) break;
         }
 
         TaskQueue.DecInflight();

@@ -40,8 +40,8 @@ void BaseCheckWarehouseTable(pqxx::nontransaction& txn, int expectedWhNumber) {
         "SELECT COUNT(*) AS count, MAX(W_ID) AS max, MIN(W_ID) AS min FROM {}", TABLE_WAREHOUSE)).one_row();
 
     auto rowCount = r[0].as<int64_t>();
-    auto minWh = r[1].as<int>();
-    auto maxWh = r[2].as<int>();
+    auto maxWh = r[1].as<int>();
+    auto minWh = r[2].as<int>();
 
     if (rowCount != expectedWhNumber || minWh != 1 || maxWh != expectedWhNumber) {
         throw std::runtime_error(fmt::format(
@@ -62,8 +62,8 @@ void BaseCheckDistrictTable(pqxx::nontransaction& txn, int expectedWhNumber) {
     if (rowCount != expectedCount)
         throw std::runtime_error(fmt::format("District count is {} and not {}", rowCount, expectedCount));
 
-    auto minWh = r[1].as<int>(), maxWh = r[2].as<int>();
-    auto minDist = r[3].as<int>(), maxDist = r[4].as<int>();
+    auto maxWh = r[1].as<int>(), minWh = r[2].as<int>();
+    auto maxDist = r[3].as<int>(), minDist = r[4].as<int>();
 
     if (minWh != 1 || maxWh != expectedWhNumber)
         throw std::runtime_error(fmt::format("District warehouse range [{}, {}] instead of [1, {}]", minWh, maxWh, expectedWhNumber));
@@ -382,6 +382,25 @@ void ConsistencyCheck33210(pqxx::nontransaction& txn, int warehouseCount) {
     }
 }
 
+void ConsistencyCheck33211(pqxx::nontransaction& txn, int warehouseCount) {
+    const int RANGE_SIZE = 50;
+    for (int startWh = 1; startWh <= warehouseCount; startWh += RANGE_SIZE) {
+        int endWh = std::min(startWh + RANGE_SIZE - 1, warehouseCount);
+        std::string sql = fmt::format(
+            "SELECT o.O_W_ID, o.O_D_ID, (o.order_cnt - n.new_order_cnt) AS delta "
+            "FROM (SELECT O_W_ID, O_D_ID, COUNT(*) AS order_cnt FROM {} "
+            "      WHERE O_W_ID >= {} AND O_W_ID <= {} GROUP BY O_W_ID, O_D_ID) AS o "
+            "JOIN (SELECT NO_W_ID, NO_D_ID, COUNT(*) AS new_order_cnt FROM {} "
+            "      WHERE NO_W_ID >= {} AND NO_W_ID <= {} GROUP BY NO_W_ID, NO_D_ID) AS n "
+            "  ON o.O_W_ID = n.NO_W_ID AND o.O_D_ID = n.NO_D_ID "
+            "WHERE (o.order_cnt - n.new_order_cnt) != {} LIMIT 1",
+            TABLE_OORDER, startWh, endWh,
+            TABLE_NEW_ORDER, startWh, endWh,
+            FIRST_UNPROCESSED_O_ID - 1);
+        CheckNoRows(txn, sql, fmt::format("3.3.2.11 w_id [{},{}]", startWh, endWh));
+    }
+}
+
 void ConsistencyCheck33212(pqxx::nontransaction& txn, int warehouseCount) {
     // C_BALANCE + C_YTD_PAYMENT = sum(delivered OL_AMOUNTs) for each customer
     const int RANGE_SIZE = 10;
@@ -507,6 +526,7 @@ void CheckSync(const std::string& connectionString, int warehouseCount, bool aft
     runCheck("3.3.2.12", [&](auto& t) { ConsistencyCheck33212(t, warehouseCount); });
 
     if (afterImport) {
+        runCheck("3.3.2.11", [&](auto& t) { ConsistencyCheck33211(t, warehouseCount); });
         runCheck("post-import: D_NEXT_O_ID", [&](auto& t) { PostImportCheckNextOrderId(t); });
         runCheck("post-import: W_YTD", [&](auto& t) { PostImportCheckWarehouseYtd(t); });
         runCheck("post-import: D_YTD", [&](auto& t) { PostImportCheckDistrictYtd(t); });

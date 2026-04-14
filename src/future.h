@@ -5,6 +5,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 #include <memory>
 
@@ -18,6 +19,9 @@ public:
         std::vector<Callback> toCall;
         {
             std::lock_guard lock(Mutex);
+            if (IsSet) {
+                throw std::logic_error("TSharedState::SetValue called on already-set state");
+            }
             Value = std::forward<TT>(value);
             IsSet = true;
             toCall.swap(Callbacks);
@@ -32,6 +36,9 @@ public:
         std::vector<Callback> toCall;
         {
             std::lock_guard lock(Mutex);
+            if (IsSet) {
+                throw std::logic_error("TSharedState::SetException called on already-set state");
+            }
             Exception = std::move(ex);
             IsSet = true;
             toCall.swap(Callbacks);
@@ -89,6 +96,9 @@ public:
         std::vector<Callback> toCall;
         {
             std::lock_guard lock(Mutex);
+            if (IsSet) {
+                throw std::logic_error("TSharedState::SetValue called on already-set state");
+            }
             IsSet = true;
             toCall.swap(Callbacks);
             CV.notify_all();
@@ -102,6 +112,9 @@ public:
         std::vector<Callback> toCall;
         {
             std::lock_guard lock(Mutex);
+            if (IsSet) {
+                throw std::logic_error("TSharedState::SetException called on already-set state");
+            }
             Exception = std::move(ex);
             IsSet = true;
             toCall.swap(Callbacks);

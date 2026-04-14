@@ -54,26 +54,9 @@ struct coroutine_traits<TFuture<void>, Args...> {
 
 } // namespace std
 
-// Awaiter for co_await on TFuture<T>.
-// Resumes the coroutine inline when the future completes.
-template <typename T>
-struct TFutureAwaiter {
-    TFuture<T> Future;
-
-    bool await_ready() {
-        return Future.IsReady();
-    }
-
-    void await_suspend(std::coroutine_handle<> handle) {
-        Future.Subscribe([handle]() { handle.resume(); });
-    }
-
-    T await_resume() {
-        return Future.Get();
-    }
-};
-
-template <typename T>
-TFutureAwaiter<T> operator co_await(TFuture<T>&& future) {
-    return TFutureAwaiter<T>{std::move(future)};
-}
+// NOTE: a bare `operator co_await(TFuture<T>&&)` was intentionally removed.
+// It would resume the coroutine inline on whatever thread sets the promise
+// (typically an IO pool thread), breaking the single-threaded-per-context
+// invariant required by the task queue. Always use TSuspendWithFuture from
+// task_queue.h to co_await a TFuture — it enqueues the resumption on the
+// correct task queue thread.

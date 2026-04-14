@@ -47,7 +47,7 @@ TFuture<QueryResult> PgSession::ExecuteQuery(
                        p = std::move(promise)]() mutable {
         try {
             if (!txn_) {
-                txn_ = std::make_unique<pqxx::work>(*conn_);
+                txn_ = std::make_unique<SnapshotTxn>(*conn_);
             }
             auto result = txn_->exec(sqlCopy, params);
             p.SetValue(QueryResult(std::move(result)));
@@ -70,7 +70,7 @@ TFuture<uint64_t> PgSession::ExecuteModify(
                        p = std::move(promise)]() mutable {
         try {
             if (!txn_) {
-                txn_ = std::make_unique<pqxx::work>(*conn_);
+                txn_ = std::make_unique<SnapshotTxn>(*conn_);
             }
             auto result = txn_->exec(sqlCopy, params);
             p.SetValue(result.affected_rows());
@@ -153,7 +153,7 @@ TFuture<void> PgSession::ExecuteCopy(
                        p = std::move(promise)]() mutable {
         try {
             if (!txn_) {
-                txn_ = std::make_unique<pqxx::work>(*conn_);
+                txn_ = std::make_unique<SnapshotTxn>(*conn_);
             }
             auto stream = pqxx::stream_to::raw_table(
                 *txn_, conn_->quote_table(tableName), conn_->quote_columns(columns));

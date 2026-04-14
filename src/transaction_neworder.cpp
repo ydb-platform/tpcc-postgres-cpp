@@ -214,10 +214,23 @@ TFuture<bool> GetNewOrderTask(
         int iid = itemIDs[olNum - 1];
         int qty = orderQuantities[olNum - 1];
 
-        double iPrice = itemPrices[iid];
+        auto priceIt = itemPrices.find(iid);
+        if (priceIt == itemPrices.end()) {
+            LOG_E("Terminal {} item price not found: I={}", context.TerminalID, iid);
+            RequestStopWithError();
+            co_return false;
+        }
+        double iPrice = priceIt->second;
         double olAmount = qty * iPrice;
 
-        auto& stock = stocks[std::make_pair(supWh, iid)];
+        auto stockKey = std::make_pair(supWh, iid);
+        auto stockIt = stocks.find(stockKey);
+        if (stockIt == stocks.end()) {
+            LOG_E("Terminal {} stock not found: W={}, I={}", context.TerminalID, supWh, iid);
+            RequestStopWithError();
+            co_return false;
+        }
+        auto& stock = stockIt->second;
         if (stock.s_quantity - qty >= 10) {
             stock.s_quantity -= qty;
         } else {

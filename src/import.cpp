@@ -5,6 +5,7 @@
 #include "util.h"
 
 #include <pqxx/pqxx>
+#include <fmt/format.h>
 
 #include <algorithm>
 #include <chrono>
@@ -70,8 +71,10 @@ int GetRandomCount(int warehouseId, int customerId, int districtId) {
 std::string CurrentTimestamp() {
     auto now = std::chrono::system_clock::now();
     auto time_t_now = std::chrono::system_clock::to_time_t(now);
+    struct tm tm_buf;
+    gmtime_r(&time_t_now, &tm_buf);
     std::ostringstream ss;
-    ss << std::put_time(std::gmtime(&time_t_now), "%Y-%m-%d %H:%M:%S");
+    ss << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S");
     return ss.str();
 }
 
@@ -462,14 +465,22 @@ void ImportSync(const TImportConfig& config) {
         if (t.joinable()) t.join();
     }
 
-    auto elapsed = Clock::now() - startTime;
-    auto seconds = std::chrono::duration<double>(elapsed).count();
-
-    if (!GetGlobalInterruptSource().stop_requested()) {
-        LOG_I("TPC-C data import completed successfully in {:.1f}s", seconds);
-    } else {
+    if (GetGlobalInterruptSource().stop_requested()) {
         throw std::runtime_error("Import was interrupted or failed. See logs.");
     }
+
+    LOG_I("Running ANALYZE on TPC-C tables...");
+    {
+        pqxx::connection conn(config.ConnectionString);
+        pqxx::nontransaction ntx(conn);
+        for (const auto* table : TPCC_TABLES) {
+            ntx.exec(fmt::format("ANALYZE {}", table));
+        }
+    }
+
+    auto elapsed = Clock::now() - startTime;
+    auto seconds = std::chrono::duration<double>(elapsed).count();
+    LOG_I("TPC-C data import completed successfully in {:.1f}s", seconds);
 }
 
 } // namespace NTPCC

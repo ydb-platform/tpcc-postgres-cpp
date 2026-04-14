@@ -21,12 +21,12 @@ TFuture<void> MakeTerminalTask(
     co_await TSuspend(queue, terminalId, std::chrono::milliseconds(10));
     sleepCounter++;
 
-    co_await MakeTransactionTask(transactionCounter);
+    MakeTransactionTask(transactionCounter);
 
     co_await TSuspend(queue, terminalId, std::chrono::milliseconds(20));
     sleepCounter++;
 
-    co_await MakeTransactionTask(transactionCounter);
+    MakeTransactionTask(transactionCounter);
 
     co_await TSuspend(queue, terminalId, std::chrono::milliseconds(30));
     sleepCounter++;
@@ -61,7 +61,7 @@ TFuture<void> MakeTerminalTaskWithMultipleTransactions(
     for (int i = 0; i < numTransactions; ++i) {
         co_await TSuspend(queue, terminalId, std::chrono::milliseconds(10));
         sleepCounter++;
-        co_await MakeTransactionTask(transactionCounter);
+        MakeTransactionTask(transactionCounter);
     }
 
     co_return;
@@ -97,7 +97,7 @@ TFuture<void> MakeTerminalTaskWithFailingTransaction(
 {
     co_await TTaskReady(queue, terminalId);
     co_await TSuspend(queue, terminalId, std::chrono::milliseconds(10));
-    co_await MakeFailingTransactionTask();
+    MakeFailingTransactionTask().Get();
     co_return;
 }
 
@@ -194,7 +194,9 @@ TFuture<void> MakeTerminalTaskWithInflightControl(
 
     for (int i = 0; i < numTransactions; ++i) {
         co_await TSuspend(queue, terminalId, std::chrono::milliseconds(5));
-        co_await MakeTransactionTaskWithInflight(queue, transactionCounter, terminalId);
+        co_await TSuspendWithFuture(
+            MakeTransactionTaskWithInflight(queue, transactionCounter, terminalId),
+            queue, terminalId);
     }
     co_return;
 }
