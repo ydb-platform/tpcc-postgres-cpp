@@ -95,6 +95,7 @@ void RunImport() {
     config.ConnectionString = FLAGS_connection;
     config.WarehouseCount = FLAGS_warehouses;
     config.LoadThreadCount = FLAGS_load_threads;
+    config.UseTui = !FLAGS_no_tui;
     NTPCC::ImportSync(config);
 }
 

@@ -5,6 +5,11 @@
 #include "log.h"
 #include "util.h"
 
+#ifdef TPCC_HAS_TUI
+#include "import_tui.h"
+#include "log_backend.h"
+#endif
+
 #include <pqxx/pqxx>
 #include <fmt/format.h>
 
@@ -21,6 +26,32 @@ namespace NTPCC {
 namespace {
 
 using Clock = std::chrono::steady_clock;
+
+// Rough per-row byte estimates for progress tracking (not exact, but close enough for TUI)
+constexpr size_t BYTES_PER_ITEM = 40;
+constexpr size_t BYTES_PER_STOCK = 280;
+constexpr size_t BYTES_PER_CUSTOMER = 600;
+constexpr size_t BYTES_PER_HISTORY = 46;
+constexpr size_t BYTES_PER_ORDER = 48;
+constexpr size_t BYTES_PER_NEW_ORDER = 12;
+constexpr size_t BYTES_PER_ORDER_LINE = 54;
+constexpr size_t AVG_ORDER_LINES_PER_ORDER = 10;
+constexpr size_t NEW_ORDERS_PER_DISTRICT = CUSTOMERS_PER_DISTRICT - FIRST_UNPROCESSED_O_ID + 1;
+
+size_t EstimateSharedDataSize() {
+    return ITEM_COUNT * BYTES_PER_ITEM;
+}
+
+size_t EstimatePerWarehouseDataSize() {
+    size_t stock = ITEM_COUNT * BYTES_PER_STOCK;
+    size_t perDistrict =
+        CUSTOMERS_PER_DISTRICT * BYTES_PER_CUSTOMER +
+        CUSTOMERS_PER_DISTRICT * BYTES_PER_HISTORY +
+        CUSTOMERS_PER_DISTRICT * BYTES_PER_ORDER +
+        NEW_ORDERS_PER_DISTRICT * BYTES_PER_NEW_ORDER +
+        CUSTOMERS_PER_DISTRICT * AVG_ORDER_LINES_PER_ORDER * BYTES_PER_ORDER_LINE;
+    return stock + DISTRICT_COUNT * perDistrict;
+}
 
 //-----------------------------------------------------------------------------
 
@@ -393,6 +424,8 @@ void LoadWarehouse(pqxx::connection& conn, int wh, TImportState& state) {
     if (state.StopToken.stop_requested()) return;
 
     LoadStock(conn, wh);
+    state.DataSizeLoaded.fetch_add(
+        ITEM_COUNT * BYTES_PER_STOCK, std::memory_order_relaxed);
 
     for (int d = DISTRICT_LOW_ID; d <= DISTRICT_HIGH_ID; ++d) {
         if (state.StopToken.stop_requested()) return;
@@ -400,6 +433,14 @@ void LoadWarehouse(pqxx::connection& conn, int wh, TImportState& state) {
         LoadCustomers(conn, wh, d);
         LoadHistory(conn, wh, d);
         LoadOrders(conn, wh, d);
+
+        size_t districtBytes =
+            CUSTOMERS_PER_DISTRICT * BYTES_PER_CUSTOMER +
+            CUSTOMERS_PER_DISTRICT * BYTES_PER_HISTORY +
+            CUSTOMERS_PER_DISTRICT * BYTES_PER_ORDER +
+            NEW_ORDERS_PER_DISTRICT * BYTES_PER_NEW_ORDER +
+            CUSTOMERS_PER_DISTRICT * AVG_ORDER_LINES_PER_ORDER * BYTES_PER_ORDER_LINE;
+        state.DataSizeLoaded.fetch_add(districtBytes, std::memory_order_relaxed);
     }
 
     state.WarehousesLoaded.fetch_add(1, std::memory_order_relaxed);
@@ -428,11 +469,14 @@ void ImportSync(const TImportConfig& config) {
     auto startTime = Clock::now();
 
     TImportState state{GetGlobalInterruptSource().get_token()};
+    state.ApproximateDataSize =
+        EstimateSharedDataSize() + config.WarehouseCount * EstimatePerWarehouseDataSize();
 
     // Load small tables on the main connection
     {
         pqxx::connection conn(config.ConnectionString);
         LoadItems(conn);
+        state.DataSizeLoaded.fetch_add(EstimateSharedDataSize(), std::memory_order_relaxed);
         LoadWarehouses(conn, 1, static_cast<int>(config.WarehouseCount));
         LoadDistricts(conn, 1, static_cast<int>(config.WarehouseCount));
     }
@@ -462,11 +506,77 @@ void ImportSync(const TImportConfig& config) {
         });
     }
 
+#ifdef TPCC_HAS_TUI
+    TLogCapture logCapture(TUI_LOG_LINES);
+    std::unique_ptr<TImportTui> tui;
+    if (config.UseTui) {
+        TImportDisplayData initData(state);
+        tui = std::make_unique<TImportTui>(
+            logCapture, config.WarehouseCount, threadCount, initData);
+    }
+#endif
+
+    {
+        size_t prevLoaded = state.DataSizeLoaded.load(std::memory_order_relaxed);
+        auto prevTime = Clock::now();
+
+        while (state.WarehousesLoaded.load(std::memory_order_relaxed) < config.WarehouseCount
+               && !state.StopToken.stop_requested())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+            auto now = Clock::now();
+            auto elapsed = std::chrono::duration<double>(now - startTime);
+            size_t loaded = state.DataSizeLoaded.load(std::memory_order_relaxed);
+
+#ifdef TPCC_HAS_TUI
+            if (tui) {
+                TImportDisplayData data(state);
+                auto& s = data.StatusData;
+                s.CurrentDataSizeLoaded = loaded;
+                s.PercentLoaded = state.ApproximateDataSize > 0
+                    ? 100.0 * loaded / state.ApproximateDataSize : 0;
+
+                auto sincePrev = std::chrono::duration<double>(now - prevTime);
+                if (sincePrev.count() > 0.01) {
+                    s.InstantSpeedMiBs =
+                        (loaded - prevLoaded) / (1024.0 * 1024.0) / sincePrev.count();
+                }
+                if (elapsed.count() > 0.01) {
+                    s.AvgSpeedMiBs = loaded / (1024.0 * 1024.0) / elapsed.count();
+                }
+
+                int totalSec = static_cast<int>(elapsed.count());
+                s.ElapsedMinutes = totalSec / 60;
+                s.ElapsedSeconds = totalSec % 60;
+
+                if (s.AvgSpeedMiBs > 0.01 && state.ApproximateDataSize > loaded) {
+                    double remainSec =
+                        (state.ApproximateDataSize - loaded) / (s.AvgSpeedMiBs * 1024 * 1024);
+                    int etaSec = static_cast<int>(remainSec);
+                    s.EstimatedTimeLeftMinutes = etaSec / 60;
+                    s.EstimatedTimeLeftSeconds = etaSec % 60;
+                }
+
+                tui->Update(data);
+                prevLoaded = loaded;
+                prevTime = now;
+            }
+#endif
+        }
+    }
+
+    bool wasInterrupted = GetGlobalInterruptSource().stop_requested();
+
+#ifdef TPCC_HAS_TUI
+    tui.reset();
+#endif
+
     for (auto& t : threads) {
         if (t.joinable()) t.join();
     }
 
-    if (GetGlobalInterruptSource().stop_requested()) {
+    if (wasInterrupted) {
         throw std::runtime_error("Import was interrupted or failed. See logs.");
     }
 

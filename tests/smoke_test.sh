@@ -52,7 +52,7 @@ echo "--- Initializing schema ---"
 "${TPCC_BIN}" --command=init --connection="${CONNECTION}"
 
 echo "--- Importing data (${TPCC_WAREHOUSES} warehouse(s)) ---"
-"${TPCC_BIN}" --command=import --warehouses="${TPCC_WAREHOUSES}" --connection="${CONNECTION}"
+"${TPCC_BIN}" --command=import --warehouses="${TPCC_WAREHOUSES}" --no_tui --connection="${CONNECTION}"
 
 echo "--- Checking after import ---"
 "${TPCC_BIN}" --command=check --warehouses="${TPCC_WAREHOUSES}" --after_import --connection="${CONNECTION}"
