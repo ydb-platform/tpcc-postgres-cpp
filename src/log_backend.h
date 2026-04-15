@@ -15,8 +15,13 @@
 
 namespace NTPCC {
 
+class TLogCapture;
+
 #ifndef TPCC_NO_SPDLOG
 using TLogProcessor = std::function<void(spdlog::level::level_enum, const std::string&)>;
+
+void StartLogCapture(TLogCapture& capture);
+void StopLogCapture();
 #endif
 
 // Captures recent log lines for TUI display

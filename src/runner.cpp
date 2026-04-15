@@ -313,6 +313,7 @@ void RunSync(const TRunConfig& config) {
     TLogCapture logCapture(TUI_LOG_LINES);
     std::unique_ptr<TRunnerTui> tui;
     if (config.UseTui) {
+        StartLogCapture(logCapture);
         auto initData = CollectDisplayData(
             config, threadCount, terminalCount, *taskQueue,
             perThreadStats, startTs, warmupEnd, runEnd, false);
@@ -386,6 +387,7 @@ void RunSync(const TRunConfig& config) {
 
 #ifdef TPCC_HAS_TUI
     tui.reset();
+    StopLogCapture();
 #endif
 
     LOG_I("Stopping terminals...");

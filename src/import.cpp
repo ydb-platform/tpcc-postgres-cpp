@@ -510,6 +510,7 @@ void ImportSync(const TImportConfig& config) {
     TLogCapture logCapture(TUI_LOG_LINES);
     std::unique_ptr<TImportTui> tui;
     if (config.UseTui) {
+        StartLogCapture(logCapture);
         TImportDisplayData initData(state);
         tui = std::make_unique<TImportTui>(
             logCapture, config.WarehouseCount, threadCount, initData);
@@ -570,6 +571,7 @@ void ImportSync(const TImportConfig& config) {
 
 #ifdef TPCC_HAS_TUI
     tui.reset();
+    StopLogCapture();
 #endif
 
     for (auto& t : threads) {
