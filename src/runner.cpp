@@ -50,6 +50,7 @@ std::shared_ptr<TRunDisplayData> CollectDisplayData(
     size_t terminalCount,
     ITaskQueue& taskQueue,
     const std::vector<std::shared_ptr<TTerminalStats>>& perThreadStats,
+    Clock::time_point startTs,
     Clock::time_point warmupEnd,
     Clock::time_point runEnd,
     bool warmupDone)
@@ -64,11 +65,9 @@ std::shared_ptr<TRunDisplayData> CollectDisplayData(
     }
 
     auto& status = data->StatusData;
-    auto totalDuration = config.WarmupDuration + config.RunDuration;
-    auto measureStart = warmupDone ? warmupEnd : now;
-    auto elapsed = std::chrono::duration<double>(now - measureStart);
+    auto totalElapsed = std::chrono::duration<double>(now - startTs);
     auto remaining = std::chrono::duration<double>(runEnd - now);
-    auto totalElapsed = std::chrono::duration<double>(now - (warmupEnd - config.WarmupDuration));
+    auto totalDuration = std::chrono::duration<double>(runEnd - startTs);
 
     int elapsedSec = static_cast<int>(totalElapsed.count());
     int remainSec = std::max(0, static_cast<int>(remaining.count()));
@@ -90,7 +89,7 @@ std::shared_ptr<TRunDisplayData> CollectDisplayData(
         totalNewOrderOK += stats->GetStats(ETransactionType::NewOrder).OK.load(std::memory_order_relaxed);
     }
 
-    double measureSeconds = elapsed.count();
+    double measureSeconds = warmupDone ? std::chrono::duration<double>(now - warmupEnd).count() : 0.0;
     status.Tpmc = measureSeconds > 0 ? (totalNewOrderOK / measureSeconds * 60.0) : 0.0;
     status.Efficiency = config.WarehouseCount > 0
         ? (status.Tpmc / (MAX_TPMC_PER_WAREHOUSE * config.WarehouseCount) * 100.0) : 0.0;
@@ -280,21 +279,35 @@ void RunSync(const TRunConfig& config) {
 
     taskQueue->Run();
 
-    for (auto& terminal : terminals) {
-        terminal->Start();
+    constexpr auto MinWarmupPerTerminalMs = std::chrono::milliseconds(1);
+    uint32_t minWarmupSeconds =
+        static_cast<uint32_t>(terminalCount * MinWarmupPerTerminalMs.count() / 1000 + 1);
+
+    bool forcedWarmup = false;
+    uint32_t warmupSeconds;
+    if (config.WarmupDuration.count() == 0) {
+        // adaptive warmup
+        if (warehouseCount <= 10) {
+            warmupSeconds = 30;
+        } else if (warehouseCount <= 100) {
+            warmupSeconds = 5 * 60;
+        } else if (warehouseCount <= 1000) {
+            warmupSeconds = 10 * 60;
+        } else {
+            warmupSeconds = 30 * 60;
+        }
+        warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
+    } else {
+        warmupSeconds = static_cast<uint32_t>(config.WarmupDuration.count());
+        if (warmupSeconds < minWarmupSeconds) {
+            forcedWarmup = true;
+            warmupSeconds = minWarmupSeconds;
+        }
     }
 
     auto startTs = Clock::now();
-    auto warmupEnd = startTs + config.WarmupDuration;
-    auto runEnd = startTs + config.WarmupDuration + config.RunDuration;
-
-    LOG_I("Benchmark running (warmup: {}s, measure: {}s)...",
-          config.WarmupDuration.count(), config.RunDuration.count());
-
-    bool warmupDone = (config.WarmupDuration.count() == 0);
-    if (warmupDone) {
-        stopWarmup.store(true);
-    }
+    auto warmupEnd = startTs + std::chrono::seconds(warmupSeconds);
+    auto runEnd = warmupEnd + config.RunDuration;
 
 #ifdef TPCC_HAS_TUI
     TLogCapture logCapture(TUI_LOG_LINES);
@@ -302,11 +315,27 @@ void RunSync(const TRunConfig& config) {
     if (config.UseTui) {
         auto initData = CollectDisplayData(
             config, threadCount, terminalCount, *taskQueue,
-            perThreadStats, warmupEnd, runEnd, warmupDone);
+            perThreadStats, startTs, warmupEnd, runEnd, false);
         tui = std::make_unique<TRunnerTui>(logCapture, initData);
     }
 #endif
 
+    if (forcedWarmup) {
+        LOG_I("Forced minimal warmup: {}s (requested {}s, need at least {}s for {} terminals)",
+              warmupSeconds, config.WarmupDuration.count(), minWarmupSeconds, terminalCount);
+    }
+
+    LOG_I("Benchmark running (warmup: {}s, measure: {}s)...",
+          warmupSeconds, config.RunDuration.count());
+
+    // Stagger terminal starts to avoid overwhelming the task queue
+    size_t startedTerminalId = 0;
+    for (; startedTerminalId < terminals.size() && !stopToken.stop_requested(); ++startedTerminalId) {
+        terminals[startedTerminalId]->Start();
+        std::this_thread::sleep_for(MinWarmupPerTerminalMs);
+    }
+
+    bool warmupDone = false;
     Clock::time_point lastDisplayUpdate = startTs;
     std::shared_ptr<TRunDisplayData> prevData;
 
@@ -317,9 +346,11 @@ void RunSync(const TRunConfig& config) {
             LOG_I("Warmup complete, starting measurement");
             stopWarmup.store(true);
             warmupDone = true;
+            warmupEnd = now;
+            runEnd = now + config.RunDuration;
         }
 
-        if (now >= runEnd) {
+        if (warmupDone && now >= runEnd) {
             LOG_I("Benchmark duration reached, stopping...");
             break;
         }
@@ -335,7 +366,7 @@ void RunSync(const TRunConfig& config) {
             if (tui) {
                 auto displayData = CollectDisplayData(
                     config, threadCount, terminalCount, *taskQueue,
-                    perThreadStats, warmupEnd, runEnd, warmupDone);
+                    perThreadStats, startTs, warmupEnd, runEnd, warmupDone);
                 if (prevData) {
                     displayData->Statistics.CalculateDerivativeAndTotal(prevData->Statistics);
                 }
