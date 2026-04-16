@@ -66,7 +66,8 @@ Run `./build/tpcc --help` for the full list. Key options:
 | `--path` | `""` | PostgreSQL schema for benchmark tables (empty uses server search_path) |
 | `--warehouses` | 1 | Number of warehouses (scales data and terminals) |
 | `--duration` | 10 | Benchmark duration in minutes |
-| `--warmup` | 0 | Warmup period in minutes before measurement starts |
+| `--warmup` | 0 | Warmup period in minutes before measurement starts (0 = adaptive) |
+| `--skip-warmup` | false | Skip warmup entirely and start measurement immediately |
 | `--threads` | auto | Coroutine threads |
 | `--max-inflight` | 100 | Max concurrent transactions |
 | `--no-delays` | false | Disable TPC-C keying/think time delays |

@@ -18,7 +18,8 @@ DEFINE_string(path, "", "PostgreSQL schema for benchmark tables (default: empty,
 DEFINE_string(command, "run", "Command to execute: init, import, run, clean, check");
 
 DEFINE_int32(warehouses, 1, "Number of warehouses");
-DEFINE_int32(warmup, 0, "Warmup duration in minutes");
+DEFINE_int32(warmup, 0, "Warmup duration in minutes (0 = adaptive)");
+DEFINE_bool(skip_warmup, false, "Skip warmup entirely and start measurement immediately");
 DEFINE_int32(duration, 10, "Benchmark run duration in minutes");
 DEFINE_int32(threads, 0, "Number of coroutine threads (0 = auto)");
 DEFINE_int32(max_inflight, NTPCC::DEFAULT_MAX_INFLIGHT, "Max inflight transactions");
@@ -52,7 +53,8 @@ void PrintHelp() {
         "  --path          PostgreSQL schema for benchmark tables (default: empty, uses server search_path)\n"
         "  --command       Command to execute (default: \"run\")\n"
         "  --warehouses    Number of warehouses (default: 1)\n"
-        "  --warmup        Warmup duration in minutes (default: 0)\n"
+        "  --warmup        Warmup duration in minutes, 0 = adaptive (default: 0)\n"
+        "  --skip-warmup   Skip warmup entirely (default: false)\n"
         "  --duration      Benchmark run duration in minutes (default: 10)\n"
         "  --threads       Number of coroutine threads, 0 = auto (default: 0)\n"
         "  --max-inflight  Max inflight transactions (default: 100)\n"
@@ -107,6 +109,7 @@ void RunBenchmark() {
     config.WarehouseCount = FLAGS_warehouses;
     config.WarmupDuration = std::chrono::minutes(FLAGS_warmup);
     config.RunDuration = std::chrono::minutes(FLAGS_duration);
+    config.SkipWarmup = FLAGS_skip_warmup;
     config.ThreadCount = FLAGS_threads;
     config.MaxInflight = FLAGS_max_inflight;
     config.NoDelays = FLAGS_no_delays;

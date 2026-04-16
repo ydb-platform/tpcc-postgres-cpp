@@ -242,7 +242,7 @@ void RunSync(const TRunConfig& config) {
     auto taskQueue = CreateTaskQueue(threadCount, maxInflight, terminalCount, terminalCount);
 
     auto stopToken = GetGlobalInterruptSource().get_token();
-    std::atomic<bool> stopWarmup{false};
+    std::atomic<bool> stopWarmup{config.SkipWarmup};
 
     std::vector<std::shared_ptr<TTerminalStats>> perThreadStats;
     perThreadStats.reserve(threadCount);
@@ -281,7 +281,9 @@ void RunSync(const TRunConfig& config) {
 
     bool forcedWarmup = false;
     uint32_t warmupSeconds;
-    if (config.WarmupDuration.count() == 0) {
+    if (config.SkipWarmup) {
+        warmupSeconds = 0;
+    } else if (config.WarmupDuration.count() == 0) {
         // adaptive warmup
         if (warehouseCount <= 10) {
             warmupSeconds = 30;
@@ -322,8 +324,13 @@ void RunSync(const TRunConfig& config) {
               warmupSeconds, config.WarmupDuration.count(), minWarmupSeconds, terminalCount);
     }
 
-    LOG_I("Benchmark running (warmup: {}s, measure: {}s)...",
-          warmupSeconds, config.RunDuration.count());
+    if (config.SkipWarmup) {
+        LOG_I("Benchmark running (warmup: skipped, measure: {}s)...",
+              config.RunDuration.count());
+    } else {
+        LOG_I("Benchmark running (warmup: {}s, measure: {}s)...",
+              warmupSeconds, config.RunDuration.count());
+    }
 
     // Stagger terminal starts to avoid overwhelming the task queue
     size_t startedTerminalId = 0;
@@ -332,7 +339,11 @@ void RunSync(const TRunConfig& config) {
         std::this_thread::sleep_for(MinWarmupPerTerminalMs);
     }
 
-    bool warmupDone = false;
+    bool warmupDone = config.SkipWarmup;
+    if (warmupDone) {
+        warmupEnd = Clock::now();
+        runEnd = warmupEnd + config.RunDuration;
+    }
     Clock::time_point lastDisplayUpdate = startTs;
     std::shared_ptr<TRunDisplayData> prevData;
 

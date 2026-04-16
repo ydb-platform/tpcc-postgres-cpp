@@ -16,6 +16,7 @@ struct TRunConfig {
     size_t WarehouseCount = DEFAULT_WAREHOUSE_COUNT;
     std::chrono::seconds WarmupDuration{0};
     std::chrono::seconds RunDuration{600};
+    bool SkipWarmup = false;
     size_t ThreadCount = DEFAULT_THREAD_COUNT;
     size_t MaxInflight = DEFAULT_MAX_INFLIGHT;
     size_t IOThreads = DEFAULT_IO_THREADS;
