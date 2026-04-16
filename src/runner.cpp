@@ -205,14 +205,53 @@ void RunSync(const TRunConfig& config) {
     const size_t warehouseCount = config.WarehouseCount;
     const size_t terminalCount = warehouseCount * TERMINALS_PER_WAREHOUSE;
 
-    size_t threadCount = config.ThreadCount;
-    if (threadCount == 0) {
-        threadCount = std::min(NumberOfMyCpus(), terminalCount);
+    const size_t maxInflight = config.MaxInflight;
+    const size_t poolSize = std::min(terminalCount, maxInflight);
+
+    // Resolve ioThreads early so we can reserve CPU for them when sizing the
+    // terminal thread pool below.
+    size_t ioThreads = config.IOThreads;
+    if (ioThreads == 0) {
+        ioThreads = maxInflight;
+    }
+    ioThreads = std::max(ioThreads, poolSize);
+
+    const size_t cpuCount = NumberOfMyCpus();
+    const size_t reservedForIo = std::min(ioThreads, std::max<size_t>(cpuCount / 4, 1));
+    const size_t maxTerminalThreadCountAvailable =
+        cpuCount > reservedForIo ? cpuCount - reservedForIo : 1;
+
+    const size_t recommendedThreadCount =
+        (warehouseCount + WAREHOUSES_PER_CPU_CORE - 1) / WAREHOUSES_PER_CPU_CORE;
+
+    size_t threadCount;
+    if (config.ThreadCount == 0) {
+        threadCount = std::min(maxTerminalThreadCountAvailable, terminalCount);
+        threadCount = std::min(threadCount, recommendedThreadCount);
+
+        // Even count looks nicer in the TUI, if we still have headroom.
+        if (threadCount % 2 != 0 && threadCount < maxTerminalThreadCountAvailable) {
+            ++threadCount;
+        }
+    } else {
+        threadCount = config.ThreadCount;
+        if (threadCount > maxTerminalThreadCountAvailable) {
+            LOG_I("User provided thread count {} is above max available {} "
+                  "(cpu count {}, io threads {}). Recommended for {} warehouses is {}. "
+                  "Setting thread count to {}",
+                  threadCount, maxTerminalThreadCountAvailable,
+                  cpuCount, ioThreads, warehouseCount, recommendedThreadCount,
+                  maxTerminalThreadCountAvailable);
+            threadCount = maxTerminalThreadCountAvailable;
+        }
     }
     threadCount = std::max(threadCount, size_t(1));
 
-    size_t maxInflight = config.MaxInflight;
-    size_t poolSize = std::min(terminalCount, maxInflight);
+    if (threadCount < recommendedThreadCount) {
+        LOG_W("Thread count {} is lower than recommended {}. "
+              "It might affect benchmark results",
+              threadCount, recommendedThreadCount);
+    }
 
     if (config.IsSimulationMode()) {
         if (config.SimulateTransactionMs > 0) {
@@ -230,11 +269,6 @@ void RunSync(const TRunConfig& config) {
 
     std::unique_ptr<PgConnectionPool> connectionPool;
     if (needsConnections) {
-        size_t ioThreads = config.IOThreads;
-        if (ioThreads == 0) {
-            ioThreads = maxInflight;
-        }
-        ioThreads = std::max(ioThreads, poolSize);
         connectionPool = std::make_unique<PgConnectionPool>(
             config.ConnectionString, poolSize, ioThreads, config.Path);
     }

@@ -8,6 +8,8 @@ namespace NTPCC {
 
 constexpr size_t TERMINALS_PER_WAREHOUSE = 10;
 
+constexpr size_t WAREHOUSES_PER_CPU_CORE = 1000;
+
 constexpr int DISTRICT_LOW_ID = 1;
 constexpr int DISTRICT_HIGH_ID = 10;
 constexpr int DISTRICT_COUNT = DISTRICT_HIGH_ID - DISTRICT_LOW_ID + 1;
