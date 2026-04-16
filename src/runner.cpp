@@ -156,7 +156,8 @@ void PrintConsoleStats(
 
 void PrintFinalResults(
     const TRunConfig& config,
-    const std::vector<std::shared_ptr<TTerminalStats>>& perThreadStats)
+    const std::vector<std::shared_ptr<TTerminalStats>>& perThreadStats,
+    std::chrono::duration<double> measureElapsed)
 {
     TTerminalStats aggregated(config.HighResHistogram);
     size_t totalFailed = 0;
@@ -169,12 +170,14 @@ void PrintFinalResults(
     }
 
     size_t totalNewOrderOK = aggregated.GetStats(ETransactionType::NewOrder).OK.load(std::memory_order_relaxed);
-    double measureDuration = config.RunDuration.count();
+    double measureDuration = measureElapsed.count();
     double tpmc = measureDuration > 0 ? (totalNewOrderOK / measureDuration * 60.0) : 0.0;
     double efficiency = config.WarehouseCount > 0
         ? (tpmc / (MAX_TPMC_PER_WAREHOUSE * config.WarehouseCount) * 100.0) : 0.0;
 
     LOG_I("=== TPC-C Results ===");
+    LOG_I("  Measured Duration: {:.1f}s (configured: {}s)",
+          measureDuration, config.RunDuration.count());
     LOG_I("  New-Order Throughput: {:.2f} tpmC", tpmc);
     if (!config.NoDelays) {
         LOG_I("  Efficiency: {:.1f}%", efficiency);
@@ -438,6 +441,11 @@ void RunSync(const TRunConfig& config) {
     StopLogCapture();
 #endif
 
+    auto measureEnd = Clock::now();
+    auto measureElapsed = warmupDone
+        ? std::chrono::duration<double>(measureEnd - warmupEnd)
+        : std::chrono::duration<double>(0);
+
     LOG_I("Stopping terminals...");
     GetGlobalInterruptSource().request_stop();
     if (connectionPool) {
@@ -446,7 +454,7 @@ void RunSync(const TRunConfig& config) {
     taskQueue->WakeupAndNeverSleep();
     taskQueue->Join();
 
-    PrintFinalResults(config, perThreadStats);
+    PrintFinalResults(config, perThreadStats, measureElapsed);
 
     connectionPool.reset();
 }
