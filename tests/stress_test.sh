@@ -12,13 +12,13 @@
 # Environment variables:
 #   TPCC_BIN        Path to tpcc binary         (default: ./build/tpcc)
 #   TPCC_WAREHOUSES Number of warehouses         (default: 5)
-#   TPCC_DURATION   Benchmark duration, seconds  (default: 60)
+#   TPCC_DURATION   Benchmark duration, minutes  (default: 1)
 
 set -euo pipefail
 
 TPCC_BIN="${TPCC_BIN:-./build/tpcc}"
 TPCC_WAREHOUSES="${TPCC_WAREHOUSES:-5}"
-TPCC_DURATION="${TPCC_DURATION:-60}"
+TPCC_DURATION="${TPCC_DURATION:-1}"
 
 DB_NAME="tpcc_stress_$$"
 CONNECTION="host=${PGHOST:-localhost} port=${PGPORT:-5432} dbname=${DB_NAME} user=${PGUSER:-postgres}"
@@ -34,7 +34,7 @@ echo "=== TPC-C Stress Test ==="
 echo "Binary:     ${TPCC_BIN}"
 echo "Database:   ${DB_NAME}"
 echo "Warehouses: ${TPCC_WAREHOUSES}"
-echo "Duration:   ${TPCC_DURATION}s"
+echo "Duration:   ${TPCC_DURATION} min"
 echo ""
 
 if [[ ! -x "${TPCC_BIN}" ]]; then
@@ -54,7 +54,7 @@ echo "--- Importing data (${TPCC_WAREHOUSES} warehouses) ---"
 echo "--- Checking after import ---"
 "${TPCC_BIN}" --command=check --warehouses="${TPCC_WAREHOUSES}" --after_import --connection="${CONNECTION}"
 
-echo "--- Running benchmark (${TPCC_DURATION}s, no delays, no TUI) ---"
+echo "--- Running benchmark (${TPCC_DURATION} min, no delays, no TUI) ---"
 "${TPCC_BIN}" --command=run \
     --warehouses="${TPCC_WAREHOUSES}" \
     --duration="${TPCC_DURATION}" \

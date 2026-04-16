@@ -40,7 +40,7 @@ createdb tpcc
 ./build/tpcc --command=check --warehouses=10 --after-import
 
 # Run the benchmark (5 minutes)
-./build/tpcc --command=run --warehouses=10 --duration=300
+./build/tpcc --command=run --warehouses=10 --duration=5
 
 # Run consistency checks after benchmark
 ./build/tpcc --command=check --warehouses=10
@@ -63,13 +63,12 @@ Run `./build/tpcc --help` for the full list. Key options:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--path` | (public) | PostgreSQL schema for benchmark tables |
+| `--path` | `""` | PostgreSQL schema for benchmark tables (empty uses server search_path) |
 | `--warehouses` | 1 | Number of warehouses (scales data and terminals) |
-| `--duration` | 600 | Benchmark duration in seconds |
-| `--warmup` | 0 | Warmup period before measurement starts |
+| `--duration` | 10 | Benchmark duration in minutes |
+| `--warmup` | 0 | Warmup period in minutes before measurement starts |
 | `--threads` | auto | Coroutine threads |
-| `--max-inflight` | auto | Max concurrent transactions |
-| `--io-threads` | 4 | I/O threads for libpqxx |
+| `--max-inflight` | 100 | Max concurrent transactions |
 | `--no-delays` | false | Disable TPC-C keying/think time delays |
 | `--no-tui` | false | Disable terminal UI (console output instead) |
 | `--after-import` | false | Check: verify freshly loaded data (stricter invariants) |
@@ -115,8 +114,8 @@ TPCC_TEST_CONNECTION="host=localhost dbname=tpcc_test user=postgres password=pos
 Test the coroutine/IO infrastructure without a real database:
 ```
 # Pure sleep simulation (no DB connection needed)
-./build/tpcc --command=run --simulate-ms=50 --duration=10 --no-tui
+./build/tpcc --command=run --simulate-ms=50 --duration=1 --no-tui
 
 # SELECT 1 simulation (needs a running PostgreSQL)
-./build/tpcc --command=run --simulate-select1=5 --duration=10
+./build/tpcc --command=run --simulate-select1=5 --duration=1
 ```

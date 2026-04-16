@@ -7,8 +7,8 @@ namespace NTPCC {
 
 constexpr int DEFAULT_WAREHOUSE_COUNT = 10;
 constexpr int DEFAULT_THREAD_COUNT = 0;
-constexpr int DEFAULT_MAX_INFLIGHT = 0;
-constexpr int DEFAULT_IO_THREADS = 4;
+constexpr int DEFAULT_MAX_INFLIGHT = 100;
+constexpr int DEFAULT_IO_THREADS = 0;
 
 struct TRunConfig {
     std::string ConnectionString;

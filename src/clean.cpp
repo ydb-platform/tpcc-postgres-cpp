@@ -33,19 +33,20 @@ void CleanSync(const std::string& connectionString, const std::string& path) {
         ntx.exec(fmt::format("SET search_path TO {}", conn.quote_name(path)));
     }
 
-    pqxx::nontransaction txn(conn);
-
     LOG_I("Starting to drop TPC-C tables");
 
-    DropTable(txn, TABLE_ORDER_LINE);
-    DropTable(txn, TABLE_NEW_ORDER);
-    DropTable(txn, TABLE_OORDER);
-    DropTable(txn, TABLE_HISTORY);
-    DropTable(txn, TABLE_CUSTOMER);
-    DropTable(txn, TABLE_DISTRICT);
-    DropTable(txn, TABLE_STOCK);
-    DropTable(txn, TABLE_ITEM);
-    DropTable(txn, TABLE_WAREHOUSE);
+    {
+        pqxx::nontransaction txn(conn);
+        DropTable(txn, TABLE_ORDER_LINE);
+        DropTable(txn, TABLE_NEW_ORDER);
+        DropTable(txn, TABLE_OORDER);
+        DropTable(txn, TABLE_HISTORY);
+        DropTable(txn, TABLE_CUSTOMER);
+        DropTable(txn, TABLE_DISTRICT);
+        DropTable(txn, TABLE_STOCK);
+        DropTable(txn, TABLE_ITEM);
+        DropTable(txn, TABLE_WAREHOUSE);
+    }
 
     if (!path.empty()) {
         try {

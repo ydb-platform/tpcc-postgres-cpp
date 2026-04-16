@@ -212,10 +212,6 @@ void RunSync(const TRunConfig& config) {
     threadCount = std::max(threadCount, size_t(1));
 
     size_t maxInflight = config.MaxInflight;
-    if (maxInflight == 0) {
-        maxInflight = terminalCount;
-    }
-
     size_t poolSize = std::min(terminalCount, maxInflight);
 
     if (config.IsSimulationMode()) {
@@ -234,11 +230,11 @@ void RunSync(const TRunConfig& config) {
 
     std::unique_ptr<PgConnectionPool> connectionPool;
     if (needsConnections) {
-        size_t ioThreads = std::max(config.IOThreads, poolSize);
-        if (ioThreads != config.IOThreads) {
-            LOG_I("Raising IO threads from {} to {} (must be >= connection pool size to avoid deadlocks)",
-                  config.IOThreads, ioThreads);
+        size_t ioThreads = config.IOThreads;
+        if (ioThreads == 0) {
+            ioThreads = maxInflight;
         }
+        ioThreads = std::max(ioThreads, poolSize);
         connectionPool = std::make_unique<PgConnectionPool>(
             config.ConnectionString, poolSize, ioThreads, config.Path);
     }

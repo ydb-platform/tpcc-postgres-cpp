@@ -13,7 +13,7 @@ set -euo pipefail
 
 TPCC_BIN="${TPCC_BIN:-./build/tpcc}"
 TPCC_WAREHOUSES="${TPCC_WAREHOUSES:-1}"
-TPCC_DURATION="${TPCC_DURATION:-10}"
+TPCC_DURATION="${TPCC_DURATION:-1}"
 
 DB_NAME="tpcc_path_test_$$"
 SCHEMA="tpcc_bench"
@@ -31,7 +31,7 @@ echo "Binary:     ${TPCC_BIN}"
 echo "Database:   ${DB_NAME}"
 echo "Schema:     ${SCHEMA}"
 echo "Warehouses: ${TPCC_WAREHOUSES}"
-echo "Duration:   ${TPCC_DURATION}s"
+echo "Duration:   ${TPCC_DURATION} min"
 echo ""
 
 if [[ ! -x "${TPCC_BIN}" ]]; then
@@ -95,7 +95,6 @@ echo "--- Run benchmark with --path=${SCHEMA} ---"
 "${TPCC_BIN}" --command=run \
     --warehouses="${TPCC_WAREHOUSES}" \
     --duration="${TPCC_DURATION}" \
-    --warmup=5 \
     --no_tui \
     --path="${SCHEMA}" \
     --connection="${CONNECTION}"

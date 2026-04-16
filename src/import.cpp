@@ -28,6 +28,8 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
+constexpr size_t MAX_LOADER_THREADS = 100;
+
 void SetSearchPath(pqxx::connection& conn, const std::string& path) {
     if (!path.empty()) {
         pqxx::nontransaction ntx(conn);
@@ -466,7 +468,7 @@ void ImportSync(const TImportConfig& config) {
 
     size_t threadCount = config.LoadThreadCount;
     if (threadCount == 0) {
-        threadCount = std::min(config.WarehouseCount, NumberOfMyCpus());
+        threadCount = std::min({config.WarehouseCount, NumberOfMyCpus(), MAX_LOADER_THREADS});
     }
     threadCount = std::max(threadCount, size_t(1));
     threadCount = std::min(threadCount, config.WarehouseCount);
