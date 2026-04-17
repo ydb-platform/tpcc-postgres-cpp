@@ -2,10 +2,10 @@
 
 #include <sstream>
 #include <iomanip>
+#include <thread>
 
 #ifdef __linux__
 #include <sched.h>
-#include <thread>
 #endif
 
 namespace NTPCC {
