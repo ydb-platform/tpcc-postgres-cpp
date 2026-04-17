@@ -37,11 +37,20 @@ On one hand, the LLM did an impressive job porting the codebase. On the other, t
 
 Recovering these required careful review and multiple prompt iterations to bring the implementation back to feature parity.
 
+## Downloads
+
+* [tpcc-0.8.0-x86-64](https://console.yandex.cloud/folders/b1gdibu7le5833lq8e58/storage/buckets/tpcc-postgres-cpp?key=tpcc-0.8.0-x86-64) (MD5: `7df718aef16c5069bbb7fe900679a06f`)
+* [tpcc-0.8.0-apple-silicon](https://console.yandex.cloud/folders/b1gdibu7le5833lq8e58/storage/buckets/tpcc-postgres-cpp?key=tpcc-0.8.0-apple-silicon) (MD5: `4487423815d315ca4bdd7321ce126e8e`)
+
 ## Dependencies
 
 Requires Clang 16+ (tested with Clang 20) and the PostgreSQL client library:
 ```
 sudo apt install libpq-dev
+```
+or on Mac:
+```
+brew install libpq
 ```
 
 All other dependencies (fmt, spdlog, gflags, libpqxx, ftxui, googletest) are bundled
@@ -54,11 +63,13 @@ automatically when found:
 
 ```
 sudo apt install libgoogle-perftools-dev libtcmalloc-minimal4
-cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)
+```
+or on Mac:
+```
+brew install gperftools
 ```
 
-The CMake status line will say `tpcc: linking tcmalloc (/usr/lib/...)` when
+The CMake status line should say `tpcc: linking tcmalloc (/usr/lib/...)` when
 it is picked up. No `LD_PRELOAD` is needed: tcmalloc is linked directly into
 the binary and overrides `malloc`/`free`/`operator new` via normal ELF symbol
 resolution. Verify with `ldd ./build/tpcc | grep tcmalloc`.
@@ -70,8 +81,22 @@ configure if absent) or `-DTPCC_USE_TCMALLOC=OFF` (use the system allocator).
 
 ```
 git submodule update --init
+```
+
+Then
+```
 cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j$(nproc)
+```
+or on Mac:
+```
+cmake -B build \
+  -DCMAKE_CXX_COMPILER="$(xcrun --find clang++)" \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DPostgreSQL_ROOT="$(brew --prefix libpq)" \
+  -DCMAKE_PREFIX_PATH="$(brew --prefix gperftools)"
+
+cmake --build build -j"$(sysctl -n hw.ncpu)"
 ```
 
 ## Running
