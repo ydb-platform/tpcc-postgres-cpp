@@ -24,9 +24,48 @@ TFuture<bool> GetPaymentTask(
     TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
-    const int warehouseID = context.WarehouseID;
-    const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
-    const double paymentAmount = static_cast<double>(RandomNumber(100, 500000)) / 100.0;
+    struct TInputs {
+        int WarehouseID;
+        int DistrictID;
+        double PaymentAmount;
+        int CustomerDistrictID;
+        int CustomerWarehouseID;
+        bool LookupByName;
+        std::string LastName;
+        int CustomerID;
+    };
+
+    const auto& in = FixedTransactionInputs<TInputs>(context, [&] {
+        TInputs generated;
+        generated.WarehouseID = static_cast<int>(context.WarehouseID);
+        generated.DistrictID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
+        generated.PaymentAmount = static_cast<double>(RandomNumber(100, 500000)) / 100.0;
+
+        if (RandomNumber(1, 100) <= 85) {
+            generated.CustomerDistrictID = generated.DistrictID;
+            generated.CustomerWarehouseID = generated.WarehouseID;
+        } else {
+            generated.CustomerDistrictID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
+            do {
+                generated.CustomerWarehouseID = RandomNumber(1, context.WarehouseCount);
+            } while (generated.CustomerWarehouseID == generated.WarehouseID && context.WarehouseCount > 1);
+        }
+
+        generated.LookupByName = RandomNumber(1, 100) <= 60;
+        if (generated.LookupByName) {
+            generated.LastName = GetNonUniformRandomLastNameForRun();
+            generated.CustomerID = 0;
+        } else {
+            generated.CustomerID = GetRandomCustomerID();
+        }
+        return generated;
+    });
+
+    const int warehouseID = in.WarehouseID;
+    const int districtID = in.DistrictID;
+    const double paymentAmount = in.PaymentAmount;
+    const int customerDistrictID = in.CustomerDistrictID;
+    const int customerWarehouseID = in.CustomerWarehouseID;
 
     LOG_T("Terminal {} started Payment: W={}, D={}", context.TerminalID, warehouseID, districtID);
 
@@ -58,25 +97,10 @@ TFuture<bool> GetPaymentTask(
     }
     std::string districtName = distResult.GetString("d_name");
 
-    // Determine customer warehouse/district
-    int customerDistrictID;
-    int customerWarehouseID;
-
-    if (RandomNumber(1, 100) <= 85) {
-        customerDistrictID = districtID;
-        customerWarehouseID = warehouseID;
-    } else {
-        customerDistrictID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
-        do {
-            customerWarehouseID = RandomNumber(1, context.WarehouseCount);
-        } while (customerWarehouseID == warehouseID && context.WarehouseCount > 1);
-    }
-
     TCustomer customer;
 
-    if (RandomNumber(1, 100) <= 60) {
-        // Look up by last name
-        std::string lastName = GetNonUniformRandomLastNameForRun();
+    if (in.LookupByName) {
+        const std::string& lastName = in.LastName;
 
         auto custFuture = GetCustomersByLastName(session, customerWarehouseID, customerDistrictID, lastName);
         auto custResult = co_await TSuspendWithFuture(std::move(custFuture), context.TaskQueue, context.TerminalID);
@@ -89,8 +113,7 @@ TFuture<bool> GetPaymentTask(
         }
         customer = std::move(*selectedCustomer);
     } else {
-        // Look up by ID
-        int customerID = GetRandomCustomerID();
+        const int customerID = in.CustomerID;
 
         auto custFuture = GetCustomerById(session, customerWarehouseID, customerDistrictID, customerID);
         auto custResult = co_await TSuspendWithFuture(std::move(custFuture), context.TaskQueue, context.TerminalID);

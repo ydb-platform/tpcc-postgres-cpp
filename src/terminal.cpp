@@ -127,6 +127,9 @@ TFuture<void> TTerminal::Run() {
         std::chrono::microseconds latencyPure{0};
         bool fatal = false;
 
+        // Reset so each business transaction gets fresh inputs; retries reuse FixedInputs.
+        Context.FixedInputs.reset();
+
         constexpr int MaxRetries = 3;
         for (int attempt = 0; attempt <= MaxRetries; ++attempt) {
             bool shouldRetry = false;

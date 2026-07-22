@@ -7,6 +7,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <utility>
 
 namespace NTPCC {
 
@@ -35,7 +36,20 @@ struct TTransactionContext {
     // Simulation mode parameters (0 = disabled)
     int SimulateTransactionMs = 0;
     int SimulateTransactionSelect1 = 0;
+
+    // User input for the current business transaction. Generated once and reused
+    // across retry attempts so a retry does not become a different txn.
+    std::shared_ptr<void> FixedInputs;
 };
+
+// Lazily generate and pin transaction inputs for the duration of retry attempts.
+template <typename TInputs, typename TGen>
+const TInputs& FixedTransactionInputs(TTransactionContext& context, TGen&& gen) {
+    if (!context.FixedInputs) {
+        context.FixedInputs = std::make_shared<TInputs>(std::forward<TGen>(gen)());
+    }
+    return *std::static_pointer_cast<TInputs>(context.FixedInputs);
+}
 
 struct TUserAbortedException : public std::runtime_error {
     TUserAbortedException() : std::runtime_error("User aborted transaction (expected rollback)") {}

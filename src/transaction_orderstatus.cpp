@@ -22,17 +22,38 @@ TFuture<bool> GetOrderStatusTask(
     TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
-    const int warehouseID = context.WarehouseID;
-    const int districtID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
+    struct TInputs {
+        int WarehouseID;
+        int DistrictID;
+        bool LookupByName;
+        std::string LastName;
+        int CustomerID;
+    };
+
+    const auto& in = FixedTransactionInputs<TInputs>(context, [&] {
+        TInputs generated;
+        generated.WarehouseID = static_cast<int>(context.WarehouseID);
+        generated.DistrictID = RandomNumber(DISTRICT_LOW_ID, DISTRICT_HIGH_ID);
+        generated.LookupByName = RandomNumber(1, 100) <= 60;
+        if (generated.LookupByName) {
+            generated.LastName = GetNonUniformRandomLastNameForRun();
+            generated.CustomerID = 0;
+        } else {
+            generated.CustomerID = GetRandomCustomerID();
+        }
+        return generated;
+    });
+
+    const int warehouseID = in.WarehouseID;
+    const int districtID = in.DistrictID;
+    const bool lookupByName = in.LookupByName;
 
     LOG_T("Terminal {} started OrderStatus: W={}, D={}", context.TerminalID, warehouseID, districtID);
-
-    bool lookupByName = RandomNumber(1, 100) <= 60;
 
     TCustomer customer;
 
     if (lookupByName) {
-        std::string lastName = GetNonUniformRandomLastNameForRun();
+        const std::string& lastName = in.LastName;
 
         auto custFuture = GetCustomersByLastName(session, warehouseID, districtID, lastName);
         auto custResult = co_await TSuspendWithFuture(std::move(custFuture), context.TaskQueue, context.TerminalID);
@@ -45,7 +66,7 @@ TFuture<bool> GetOrderStatusTask(
         }
         customer = std::move(*selectedCustomer);
     } else {
-        int customerID = GetRandomCustomerID();
+        const int customerID = in.CustomerID;
 
         auto custFuture = GetCustomerById(session, warehouseID, districtID, customerID);
         auto custResult = co_await TSuspendWithFuture(std::move(custFuture), context.TaskQueue, context.TerminalID);
