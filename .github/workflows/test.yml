@@ -12,26 +12,17 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-20 libgflags-dev libgtest-dev
-
-      - name: Build fmt
-        run: |
-          git clone --branch 11.1.4 --depth 1 https://github.com/fmtlib/fmt.git /tmp/fmt
-          cmake -B /tmp/fmt/build -S /tmp/fmt \
-            -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_INSTALL_PREFIX=/tmp/deps/fmt \
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build /tmp/fmt/build -j$(nproc)
-          cmake --install /tmp/fmt/build
+          sudo apt-get install -y clang-20 libpq-dev
 
       - name: Build and run unit tests
         run: |
           cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt" \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build --target tpcc_tests -j$(nproc)
           ./build/tpcc_tests
@@ -59,49 +50,17 @@ jobs:
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-20 libgflags-dev libpq-dev postgresql-client
-
-      - name: Build fmt
-        run: |
-          git clone --branch 11.1.4 --depth 1 https://github.com/fmtlib/fmt.git /tmp/fmt
-          cmake -B /tmp/fmt/build -S /tmp/fmt \
-            -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_INSTALL_PREFIX=/tmp/deps/fmt \
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build /tmp/fmt/build -j$(nproc)
-          cmake --install /tmp/fmt/build
-
-      - name: Build spdlog
-        run: |
-          git clone --branch v1.15.3 --depth 1 https://github.com/gabime/spdlog.git /tmp/spdlog
-          cmake -B /tmp/spdlog/build -S /tmp/spdlog \
-            -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_INSTALL_PREFIX=/tmp/deps/spdlog \
-            -DSPDLOG_FMT_EXTERNAL=ON \
-            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt" \
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build /tmp/spdlog/build -j$(nproc)
-          cmake --install /tmp/spdlog/build
-
-      - name: Build libpqxx
-        run: |
-          git clone --branch 7.10.0 --depth 1 https://github.com/jtv/libpqxx.git /tmp/libpqxx
-          cmake -B /tmp/libpqxx/build -S /tmp/libpqxx \
-            -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_INSTALL_PREFIX=/tmp/deps/libpqxx \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TEST=OFF -DBUILD_DOC=OFF
-          cmake --build /tmp/libpqxx/build -j$(nproc)
-          cmake --install /tmp/libpqxx/build
+          sudo apt-get install -y clang-20 libpq-dev postgresql-client
 
       - name: Build tpcc
         run: |
           cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt;/tmp/deps/spdlog;/tmp/deps/libpqxx" \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j$(nproc)
 
@@ -142,49 +101,17 @@ jobs:
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-20 libgflags-dev libpq-dev postgresql-client
-
-      - name: Build fmt
-        run: |
-          git clone --branch 11.1.4 --depth 1 https://github.com/fmtlib/fmt.git /tmp/fmt
-          cmake -B /tmp/fmt/build -S /tmp/fmt \
-            -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_INSTALL_PREFIX=/tmp/deps/fmt \
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build /tmp/fmt/build -j$(nproc)
-          cmake --install /tmp/fmt/build
-
-      - name: Build spdlog
-        run: |
-          git clone --branch v1.15.3 --depth 1 https://github.com/gabime/spdlog.git /tmp/spdlog
-          cmake -B /tmp/spdlog/build -S /tmp/spdlog \
-            -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_INSTALL_PREFIX=/tmp/deps/spdlog \
-            -DSPDLOG_FMT_EXTERNAL=ON \
-            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt" \
-            -DCMAKE_BUILD_TYPE=Release
-          cmake --build /tmp/spdlog/build -j$(nproc)
-          cmake --install /tmp/spdlog/build
-
-      - name: Build libpqxx
-        run: |
-          git clone --branch 7.10.0 --depth 1 https://github.com/jtv/libpqxx.git /tmp/libpqxx
-          cmake -B /tmp/libpqxx/build -S /tmp/libpqxx \
-            -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_INSTALL_PREFIX=/tmp/deps/libpqxx \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TEST=OFF -DBUILD_DOC=OFF
-          cmake --build /tmp/libpqxx/build -j$(nproc)
-          cmake --install /tmp/libpqxx/build
+          sudo apt-get install -y clang-20 libpq-dev postgresql-client
 
       - name: Build tpcc (${{ matrix.sanitizer }})
         run: |
           cmake -B build -DCMAKE_CXX_COMPILER=clang++-20 \
-            -DCMAKE_PREFIX_PATH="/tmp/deps/fmt;/tmp/deps/spdlog;/tmp/deps/libpqxx" \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             ${{ matrix.cmake_flags }}
           cmake --build build -j$(nproc)
