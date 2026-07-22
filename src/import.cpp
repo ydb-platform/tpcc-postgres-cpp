@@ -70,27 +70,27 @@ size_t EstimatePerWarehouseDataSize() {
 
 //-----------------------------------------------------------------------------
 
-std::string RandomStringBenchbase(int strLen, char baseChar = 'a') {
-    if (strLen > 1) {
-        int actualLength = strLen - 1;
-        std::string result;
-        result.reserve(actualLength);
-        for (int i = 0; i < actualLength; ++i) {
-            result += static_cast<char>(baseChar + RandomNumber(0, 25));
-        }
-        return result;
+// TPC-C §4.3.2.2: random a-string of the requested length (letters only here).
+std::string RandomString(int strLen, char baseChar = 'a') {
+    if (strLen <= 0) {
+        return "";
     }
-    return "";
+    std::string result;
+    result.reserve(strLen);
+    for (int i = 0; i < strLen; ++i) {
+        result += static_cast<char>(baseChar + RandomNumber(0, 25));
+    }
+    return result;
 }
 
 std::string RandomAlphaString(int minLength, int maxLength) {
     int length = RandomNumber(minLength, maxLength);
-    return RandomStringBenchbase(length, 'a');
+    return RandomString(length, 'a');
 }
 
 std::string RandomUpperAlphaString(int minLength, int maxLength) {
     int length = RandomNumber(minLength, maxLength);
-    return RandomStringBenchbase(length, 'A');
+    return RandomString(length, 'A');
 }
 
 std::string RandomNumericString(int length) {
@@ -139,10 +139,10 @@ void LoadItems(pqxx::connection& conn) {
         int randPct = RandomNumber(1, 100);
         int len = RandomNumber(26, 50);
         if (randPct > 10) {
-            data = RandomStringBenchbase(len);
+            data = RandomString(len);
         } else {
             int startOrig = RandomNumber(2, len - 8);
-            data = RandomStringBenchbase(startOrig) + "ORIGINAL" + RandomStringBenchbase(len - startOrig - 8);
+            data = RandomString(startOrig) + "ORIGINAL" + RandomString(len - startOrig - 8);
         }
 
         stream.write_values(
@@ -178,8 +178,8 @@ void LoadWarehouses(pqxx::connection& conn, int startId, int lastId) {
             RandomAlphaString(10, 20),
             RandomAlphaString(10, 20),
             RandomAlphaString(10, 20),
-            RandomUpperAlphaString(3, 3),
-            std::string("123456789")
+            RandomUpperAlphaString(2, 2),
+            RandomNumericString(4) + "11111"
         );
     }
 
@@ -209,8 +209,8 @@ void LoadDistricts(pqxx::connection& conn, int startId, int lastId) {
                 RandomAlphaString(10, 20),
                 RandomAlphaString(10, 20),
                 RandomAlphaString(10, 20),
-                RandomUpperAlphaString(3, 3),
-                std::string("123456789")
+                RandomUpperAlphaString(2, 2),
+                RandomNumericString(4) + "11111"
             );
         }
     }
@@ -235,10 +235,10 @@ void LoadStock(pqxx::connection& conn, int wh) {
         int randPct = RandomNumber(1, 100);
         int len = RandomNumber(26, 50);
         if (randPct > 10) {
-            data = RandomStringBenchbase(len);
+            data = RandomString(len);
         } else {
             int startOrig = RandomNumber(2, len - 8);
-            data = RandomStringBenchbase(startOrig) + "ORIGINAL" + RandomStringBenchbase(len - startOrig - 8);
+            data = RandomString(startOrig) + "ORIGINAL" + RandomString(len - startOrig - 8);
         }
 
         stream.write_values(
@@ -249,16 +249,16 @@ void LoadStock(pqxx::connection& conn, int wh) {
             0,
             0,
             data,
-            RandomStringBenchbase(24),
-            RandomStringBenchbase(24),
-            RandomStringBenchbase(24),
-            RandomStringBenchbase(24),
-            RandomStringBenchbase(24),
-            RandomStringBenchbase(24),
-            RandomStringBenchbase(24),
-            RandomStringBenchbase(24),
-            RandomStringBenchbase(24),
-            RandomStringBenchbase(24)
+            RandomString(24),
+            RandomString(24),
+            RandomString(24),
+            RandomString(24),
+            RandomString(24),
+            RandomString(24),
+            RandomString(24),
+            RandomString(24),
+            RandomString(24),
+            RandomString(24)
         );
     }
 
@@ -294,7 +294,7 @@ void LoadCustomers(pqxx::connection& conn, int wh, int district) {
             wh,
             district,
             cid,
-            RandomNumber(1, 5000) / 10000.0,
+            RandomNumber(0, 5000) / 10000.0,
             credit,
             last,
             RandomAlphaString(8, 16),
@@ -306,7 +306,7 @@ void LoadCustomers(pqxx::connection& conn, int wh, int district) {
             RandomAlphaString(10, 20),
             RandomAlphaString(10, 20),
             RandomAlphaString(10, 20),
-            RandomUpperAlphaString(3, 3),
+            RandomUpperAlphaString(2, 2),
             RandomNumericString(4) + "11111",
             RandomNumericString(16),
             ts,
@@ -339,7 +339,7 @@ void LoadHistory(pqxx::connection& conn, int wh, int district) {
             wh,
             ts,
             10.00,
-            RandomAlphaString(10, 24)
+            RandomAlphaString(12, 24)
         );
     }
 
@@ -423,7 +423,7 @@ void LoadOrders(pqxx::connection& conn, int wh, int district) {
 
                 stream.write_values(
                     wh, district, oid, lineNum, itemId, deliveryDate,
-                    amount, wh, 5.0, RandomStringBenchbase(24)
+                    amount, wh, 5.0, RandomString(24)
                 );
             }
         }
