@@ -136,7 +136,7 @@ CREATE TABLE oorder (
     o_entry_d    timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (o_w_id, o_d_id, o_id),
     FOREIGN KEY (o_w_id, o_d_id, o_c_id) REFERENCES customer (c_w_id, c_d_id, c_id) ON DELETE CASCADE,
-    UNIQUE (o_w_id, o_d_id, o_c_id, o_id)
+    CONSTRAINT idx_order UNIQUE (o_w_id, o_d_id, o_c_id, o_id)
 );
 
 CREATE TABLE new_order (
@@ -167,7 +167,6 @@ CREATE TABLE order_line (
 
 const char* INDEX_DDL = R"(
 CREATE INDEX IF NOT EXISTS idx_customer_name ON customer (c_w_id, c_d_id, c_last, c_first);
-CREATE INDEX IF NOT EXISTS idx_order ON oorder (o_w_id, o_d_id, o_c_id, o_id);
 )";
 
 } // anonymous
