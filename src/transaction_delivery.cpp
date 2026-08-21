@@ -35,8 +35,20 @@ TFuture<bool> GetDeliveryTask(
     TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
-    const int warehouseID = context.WarehouseID;
-    const int carrierID = RandomNumber(1, 10);
+    struct TInputs {
+        int WarehouseID;
+        int CarrierID;
+    };
+
+    const auto& in = FixedTransactionInputs<TInputs>(context, [&] {
+        return TInputs{
+            .WarehouseID = static_cast<int>(context.WarehouseID),
+            .CarrierID = static_cast<int>(RandomNumber(1, 10)),
+        };
+    });
+
+    const int warehouseID = in.WarehouseID;
+    const int carrierID = in.CarrierID;
 
     LOG_T("Terminal {} started Delivery: W={}", context.TerminalID, warehouseID);
 
